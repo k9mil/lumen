@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import Float, ForeignKey, Index, Integer, String
+from sqlalchemy import Boolean, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -12,6 +12,8 @@ class BuildingStatus(str, enum.Enum):
     NEEDS_REVIEW = "needs_review"
     REVIEWED = "reviewed"
     ESCALATED = "escalated"
+    CLEARED = "cleared"
+    MONITORING = "monitoring"
 
 
 class RiskTier(str, enum.Enum):
@@ -39,6 +41,13 @@ class Building(Base):
     status: Mapped[str] = mapped_column(String(20), default=BuildingStatus.ACTIVE.value)
     risk_score: Mapped[int] = mapped_column(Integer, default=0)
     risk_tier: Mapped[str] = mapped_column(String(20), default=RiskTier.LOW.value)
+    tenant: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    registered_use: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    detected_use: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    use_mismatch: Mapped[bool] = mapped_column(Boolean, default=False)
+    listed: Mapped[bool] = mapped_column(Boolean, default=False)
+    assigned_to: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    property_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
 

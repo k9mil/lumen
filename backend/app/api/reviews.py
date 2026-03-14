@@ -35,8 +35,11 @@ async def create_review(
     # Update building status based on review action
     if data.action == ReviewAction.ESCALATED.value:
         building.status = BuildingStatus.ESCALATED.value
-    else:
-        building.status = BuildingStatus.REVIEWED.value
+        building.assigned_to = "escalated"
+    elif data.action == ReviewAction.CLEARED.value:
+        building.status = BuildingStatus.CLEARED.value
+    elif data.action == ReviewAction.NOTED.value:
+        building.status = BuildingStatus.MONITORING.value
 
     await db.commit()
     await db.refresh(review)

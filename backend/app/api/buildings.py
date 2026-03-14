@@ -1,13 +1,114 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db
-from app.schemas.building import BuildingListResponse, BuildingResponse
+from app.models.building import Building
+from app.models.snapshot import Snapshot
+from app.schemas.building import (
+    BuildingListResponse,
+    BuildingResponse,
+    DashboardBuildingResponse,
+    DashboardResponse,
+    SignalResponse,
+)
 from app.schemas.evidence import DiffItem, EvidenceItemResponse, EvidenceResponse
 from app.schemas.snapshot import SnapshotResponse
 from app.services.building_service import get_building, get_building_evidence, list_buildings
 
 router = APIRouter(prefix="/api/buildings", tags=["buildings"])
+
+# Signal type to human-readable source mapping
+SIGNAL_SOURCE_MAP = {
+    "cv_classification": "Vision Model",
+    "sic_mismatch": "Companies House",
+    "licensing": "Licensing Board",
+    "keyword_hit": "Street View",
+}
+
+# Signal type to severity mapping based on weight
+def _weight_to_severity(weight: float) -> str:
+    if weight >= 40:
+        return "critical"
+    elif weight >= 25:
+        return "high"
+    elif weight >= 15:
+        return "medium"
+    return "low"
+
+
+def _compute_risk_trend(snapshots: list) -> str:
+    """Compute trend from snapshot history."""
+    if len(snapshots) < 2:
+        return "stable"
+    latest = snapshots[0].risk_score
+    previous = snapshots[1].risk_score
+    if latest > previous + 5:
+        return "up"
+    elif latest < previous - 5:
+        return "down"
+    return "stable"
+
+
+@router.get("/dashboard", response_model=DashboardResponse)
+async def dashboard_buildings(db: AsyncSession = Depends(get_db)):
+    """Return all buildings in the shape the frontend dashboard expects,
+    including signals from latest snapshot."""
+    # Get all buildings
+    result = await db.execute(
+        select(Building).order_by(Building.risk_score.desc())
+    )
+    buildings = list(result.scalars().all())
+
+    dashboard_buildings = []
+    for building in buildings:
+        # Get latest 2 snapshots with evidence items
+        snap_result = await db.execute(
+            select(Snapshot)
+            .where(Snapshot.building_id == building.id)
+            .options(selectinload(Snapshot.evidence_items))
+            .order_by(Snapshot.run_at.desc())
+            .limit(2)
+        )
+        snapshots = list(snap_result.scalars().all())
+
+        # Build signals from evidence items
+        signals = []
+        if snapshots:
+            latest = snapshots[0]
+            for item in latest.evidence_items:
+                signals.append(SignalResponse(
+                    id=f"s{item.id}",
+                    source=SIGNAL_SOURCE_MAP.get(item.signal_type, item.signal_type),
+                    severity=_weight_to_severity(item.weight),
+                    description=item.description,
+                    timestamp=latest.run_at.isoformat() + "Z",
+                ))
+
+        risk_trend = _compute_risk_trend(snapshots)
+
+        dashboard_buildings.append(DashboardBuildingResponse(
+            id=str(building.id),
+            address=building.address,
+            tenant=building.tenant or "",
+            riskScore=building.risk_score,
+            riskTrend=risk_trend,
+            riskTier=building.risk_tier,
+            status=building.status,
+            propertyType=building.property_type or building.property_class or "",
+            listed=building.listed,
+            registeredUse=building.registered_use or "",
+            detectedUse=building.detected_use or "",
+            useMismatch=building.use_mismatch,
+            lat=building.lat or 0.0,
+            lng=building.lng or 0.0,
+            lastUpdated=building.updated_at.isoformat() + "Z",
+            assignedTo=building.assigned_to,
+            signals=signals,
+        ))
+
+    return DashboardResponse(buildings=dashboard_buildings, total=len(dashboard_buildings))
 
 
 @router.get("/", response_model=BuildingListResponse)

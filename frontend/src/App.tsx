@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
-import { buildings as initialBuildings } from "./data";
-import type { Building, TabId, RiskTier } from "./types";
+import { useBuildings } from "./hooks/useBuildings";
+import type { TabId, RiskTier } from "./types";
 import Sidebar from "./components/Sidebar";
 import TopBar from "./components/TopBar";
 import Header from "./components/Header";
@@ -12,7 +12,13 @@ import BuildingsTable from "./components/BuildingsTable";
 import BuildingModal from "./components/BuildingModal";
 
 export default function App() {
-  const [buildings, setBuildings] = useState<Building[]>(initialBuildings);
+  const {
+    buildings,
+    setBuildings,
+    loading,
+    error,
+  } = useBuildings();
+
   const [activeTab, setActiveTab] = useState<TabId>("all");
   const [search, setSearch] = useState("");
   const [riskFilter, setRiskFilter] = useState<RiskTier | "all">("all");
@@ -87,7 +93,7 @@ export default function App() {
     setSelectedId(null);
   }, []);
 
-  const handleMarkReviewed = useCallback((id: string) => {
+  const handleAcceptRisk = useCallback((id: string) => {
     setBuildings((prev) =>
       prev.map((b) =>
         b.id === id ? { ...b, status: "cleared" as const } : b
@@ -96,7 +102,7 @@ export default function App() {
     setSelectedId(null);
   }, []);
 
-  const handleDismiss = useCallback((id: string) => {
+  const handleDecline = useCallback((id: string) => {
     setBuildings((prev) =>
       prev.map((b) =>
         b.id === id ? { ...b, status: "monitoring" as const } : b
@@ -105,17 +111,28 @@ export default function App() {
     setSelectedId(null);
   }, []);
 
-  const handleEscalate = useCallback((id: string) => {
+  const handleRefer = useCallback((id: string, _target: string) => {
+    // In production: route to senior UW, technical specialist, or claims
     setBuildings((prev) =>
       prev.map((b) =>
-        b.id === id ? { ...b, status: "needs_review" as const, assignedTo: "escalated" } : b
+        b.id === id ? { ...b, assignedTo: "referred" } : b
       )
     );
     setSelectedId(null);
   }, []);
 
-  const handleRequestSiteVisit = useCallback((_id: string) => {
-    // In production this would trigger a site visit request workflow
+  const handleRequestSurvey = useCallback((_id: string) => {
+    // In production: trigger loss control survey request
+    setSelectedId(null);
+  }, []);
+
+  const handleFlagForRenewal = useCallback((id: string) => {
+    // In production: mark for terms change at next renewal
+    setBuildings((prev) =>
+      prev.map((b) =>
+        b.id === id ? { ...b, status: "monitoring" as const } : b
+      )
+    );
     setSelectedId(null);
   }, []);
 
@@ -184,10 +201,11 @@ export default function App() {
         building={selectedBuilding}
         isOpen={!!selectedId}
         onClose={handleCloseModal}
-        onMarkReviewed={handleMarkReviewed}
-        onDismiss={handleDismiss}
-        onEscalate={handleEscalate}
-        onRequestSiteVisit={handleRequestSiteVisit}
+        onAcceptRisk={handleAcceptRisk}
+        onDecline={handleDecline}
+        onRefer={handleRefer}
+        onRequestSurvey={handleRequestSurvey}
+        onFlagForRenewal={handleFlagForRenewal}
       />
     </div>
   );

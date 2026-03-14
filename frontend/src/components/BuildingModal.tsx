@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Check, Building2, AlertTriangle, Clock, Eye, FileText, Shield, MapPin, Send, Download, MessageSquare } from "lucide-react";
+import { useState } from "react";
+import { X, Check, Building2, AlertTriangle, Clock, Eye, FileText, Shield, ClipboardList, Flag, ChevronDown, UserCheck, Users, Scale } from "lucide-react";
 import type { Building, RiskTier, Signal } from "../types";
 
 const RISK_COLORS: Record<RiskTier, string> = {
@@ -66,21 +67,24 @@ interface BuildingModalProps {
   building: Building | null;
   isOpen: boolean;
   onClose: () => void;
-  onMarkReviewed: (id: string) => void;
-  onDismiss: (id: string) => void;
-  onEscalate?: (id: string) => void;
-  onRequestSiteVisit?: (id: string) => void;
+  onAcceptRisk: (id: string) => void;
+  onDecline: (id: string) => void;
+  onRefer: (id: string, target: string) => void;
+  onRequestSurvey: (id: string) => void;
+  onFlagForRenewal: (id: string) => void;
 }
 
 export default function BuildingModal({
   building,
   isOpen,
   onClose,
-  onMarkReviewed,
-  onDismiss,
-  onEscalate,
-  onRequestSiteVisit,
+  onAcceptRisk,
+  onDecline,
+  onRefer,
+  onRequestSurvey,
+  onFlagForRenewal,
 }: BuildingModalProps) {
+  const [showReferMenu, setShowReferMenu] = useState(false);
   if (!building) return null;
 
   return (
@@ -374,66 +378,101 @@ export default function BuildingModal({
                   </div>
                 </div>
 
-                {/* Footer — underwriter actions */}
+                {/* Footer — underwriting decisions */}
                 <motion.div
                   className="px-8 py-4 border-t border-white/[0.06] bg-[#0f0f10] shrink-0"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.4, duration: 0.4 }}
                 >
-                  <div className="flex items-center gap-3">
-                    {/* Primary action */}
+                  <div className="flex items-center gap-2.5">
+                    {/* Accept Risk — primary */}
                     <button
-                      onClick={() => onMarkReviewed(building.id)}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-white text-gray-900 text-[13px] font-semibold rounded-xl hover:bg-white/90 transition-colors"
+                      onClick={() => onAcceptRisk(building.id)}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-emerald-500 text-white text-[13px] font-semibold rounded-xl hover:bg-emerald-400 transition-colors"
                     >
-                      <Check size={16} />
-                      Mark Reviewed
+                      <Check size={15} />
+                      Accept Risk
                     </button>
 
-                    {/* Escalate */}
-                    {(building.riskTier === "critical" || building.riskTier === "high") && (
+                    {/* Refer — dropdown */}
+                    <div className="relative">
                       <button
-                        onClick={() => onEscalate?.(building.id)}
-                        className="flex items-center gap-2 px-4 py-2.5 text-red-400 text-[13px] font-medium border border-red-500/20 bg-red-500/[0.06] rounded-xl hover:bg-red-500/[0.12] transition-colors"
+                        onClick={() => setShowReferMenu(!showReferMenu)}
+                        className="flex items-center gap-2 px-4 py-2.5 text-white/70 text-[13px] font-medium border border-white/[0.1] rounded-xl hover:bg-white/[0.04] transition-colors"
                       >
-                        <Send size={14} />
-                        Escalate
+                        <Users size={14} />
+                        Refer
+                        <ChevronDown size={12} className={`transition-transform ${showReferMenu ? 'rotate-180' : ''}`} />
                       </button>
-                    )}
+                      {showReferMenu && (
+                        <motion.div
+                          className="absolute bottom-full left-0 mb-2 w-[220px] bg-[#1a1a1b] border border-white/[0.1] rounded-xl shadow-2xl overflow-hidden z-10"
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                        >
+                          <button
+                            onClick={() => { onRefer(building.id, "senior"); setShowReferMenu(false); }}
+                            className="w-full flex items-center gap-3 px-4 py-3 text-[13px] text-white/70 hover:bg-white/[0.06] transition-colors text-left"
+                          >
+                            <UserCheck size={14} className="text-amber-400 shrink-0" />
+                            <div>
+                              <div className="font-medium text-white/90">Senior Underwriter</div>
+                              <div className="text-[11px] text-white/40">Exceeds authority limit</div>
+                            </div>
+                          </button>
+                          <button
+                            onClick={() => { onRefer(building.id, "technical"); setShowReferMenu(false); }}
+                            className="w-full flex items-center gap-3 px-4 py-3 text-[13px] text-white/70 hover:bg-white/[0.06] transition-colors text-left border-t border-white/[0.06]"
+                          >
+                            <Shield size={14} className="text-blue-400 shrink-0" />
+                            <div>
+                              <div className="font-medium text-white/90">Technical Specialist</div>
+                              <div className="text-[11px] text-white/40">Listed building, flood, etc.</div>
+                            </div>
+                          </button>
+                          <button
+                            onClick={() => { onRefer(building.id, "claims"); setShowReferMenu(false); }}
+                            className="w-full flex items-center gap-3 px-4 py-3 text-[13px] text-white/70 hover:bg-white/[0.06] transition-colors text-left border-t border-white/[0.06]"
+                          >
+                            <Scale size={14} className="text-red-400 shrink-0" />
+                            <div>
+                              <div className="font-medium text-white/90">Claims Team</div>
+                              <div className="text-[11px] text-white/40">Potential existing claim</div>
+                            </div>
+                          </button>
+                        </motion.div>
+                      )}
+                    </div>
 
-                    {/* Request Site Visit */}
+                    {/* Request Survey */}
                     <button
-                      onClick={() => onRequestSiteVisit?.(building.id)}
-                      className="flex items-center gap-2 px-4 py-2.5 text-white/60 text-[13px] font-medium border border-white/[0.1] rounded-xl hover:bg-white/[0.04] transition-colors"
+                      onClick={() => onRequestSurvey(building.id)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-white/70 text-[13px] font-medium border border-white/[0.1] rounded-xl hover:bg-white/[0.04] transition-colors"
                     >
-                      <MapPin size={14} />
-                      Request Site Visit
+                      <ClipboardList size={14} />
+                      Request Survey
                     </button>
 
                     {/* Spacer */}
                     <div className="flex-1" />
 
-                    {/* Secondary actions */}
+                    {/* Flag for Renewal */}
                     <button
-                      className="flex items-center gap-2 px-3 py-2.5 text-white/40 text-[12px] rounded-lg hover:bg-white/[0.04] hover:text-white/60 transition-colors"
-                      title="Add note"
+                      onClick={() => onFlagForRenewal(building.id)}
+                      className="flex items-center gap-2 px-3 py-2.5 text-amber-400/70 text-[12px] font-medium rounded-lg hover:bg-amber-500/[0.06] transition-colors"
                     >
-                      <MessageSquare size={14} />
-                      Note
+                      <Flag size={13} />
+                      Flag for Renewal
                     </button>
+
+                    {/* Decline */}
                     <button
-                      className="flex items-center gap-2 px-3 py-2.5 text-white/40 text-[12px] rounded-lg hover:bg-white/[0.04] hover:text-white/60 transition-colors"
-                      title="Export report"
+                      onClick={() => onDecline(building.id)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-white/40 text-[12px] font-medium rounded-lg hover:bg-red-500/[0.06] hover:text-red-400 transition-colors"
                     >
-                      <Download size={14} />
-                      Export
-                    </button>
-                    <button
-                      onClick={() => onDismiss(building.id)}
-                      className="px-4 py-2.5 text-white/40 text-[12px] rounded-lg hover:bg-white/[0.04] hover:text-white/60 transition-colors"
-                    >
-                      Dismiss
+                      <X size={14} />
+                      Decline
                     </button>
                   </div>
                 </motion.div>

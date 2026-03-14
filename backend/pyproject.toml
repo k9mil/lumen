@@ -13,6 +13,7 @@ dependencies = [
     "python-dotenv>=1.0",
     "google-genai>=1.0",
     "sqlite-vec>=0.1",
+    "psycopg2>=2.9.11",
 ]
 
 [project.optional-dependencies]
