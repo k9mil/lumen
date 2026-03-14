@@ -45,7 +45,8 @@ export default function MapPanel({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showHotspots, setShowHotspots] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [isSearching, setIsSearching] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
   const markersMapRef = useRef<Map<string, any>>(new Map());
   const hotspotsRef = useRef<any[]>([]);
 
@@ -275,32 +276,32 @@ export default function MapPanel({
     }
   }, [flyToId, buildings]);
 
-  // Handle search
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!searchQuery.trim() || !mapRef.current) return;
+  // Filter buildings for autosuggest
+  const suggestions = searchQuery.trim().length > 0
+    ? buildings.filter((b) => {
+        const q = searchQuery.toLowerCase();
+        return b.address.toLowerCase().includes(q) || b.tenant.toLowerCase().includes(q);
+      }).slice(0, 6)
+    : [];
 
-    setIsSearching(true);
-
-    try {
-      const response = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(searchQuery)}.json?access_token=pk.eyJ1Ijoia2FtaWx6YWsiLCJhIjoiY21tbDJubmd0MDZ4bzJzcjhtenNkemVtcyJ9.XlGtaB72L5YlbYTnywBaDw&limit=1`
-      );
-      const data = await response.json();
-
-      if (data.features && data.features.length > 0) {
-        const [lng, lat] = data.features[0].center;
-        mapRef.current.flyTo({
-          center: [lng, lat],
-          zoom: 16,
-          duration: 2000,
-        });
-      }
-    } catch (error) {
-      console.error("Geocoding error:", error);
+  const selectSuggestion = (building: Building) => {
+    setSearchQuery(building.address);
+    setSearchFocused(false);
+    onSelectBuilding(building.id);
+    if (mapRef.current) {
+      mapRef.current.flyTo({
+        center: [building.lng, building.lat],
+        zoom: 17,
+        duration: 1500,
+      });
     }
+  };
 
-    setIsSearching(false);
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (suggestions.length > 0) {
+      selectSuggestion(suggestions[0]);
+    }
   };
 
   const toggleFullscreen = () => {
@@ -393,35 +394,64 @@ export default function MapPanel({
               exit={{ opacity: 0, y: 20 }}
               transition={{ duration: 0.3 }}
             >
-              <form onSubmit={handleSearch}>
-                <div className="flex items-center bg-black/50 backdrop-blur-xl rounded-2xl border border-white/[0.12] px-5 py-3.5 shadow-2xl">
-                  <Search size={16} className="text-white/50 mr-3" />
-                  <input
-                    type="text"
-                    placeholder="Search address..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="bg-transparent text-white placeholder-white/30 text-[14px] w-[220px] focus:outline-none"
-                    autoFocus
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => setSearchQuery("")}
-                      className="ml-2 text-white/30 hover:text-white transition-colors"
+              <div className="relative">
+                <form onSubmit={handleSearch}>
+                  <div className="flex items-center bg-black/50 backdrop-blur-xl rounded-2xl border border-white/[0.12] px-5 py-3.5 shadow-2xl">
+                    <Search size={16} className="text-white/50 mr-3" />
+                    <input
+                      ref={searchRef}
+                      type="text"
+                      placeholder="Search properties..."
+                      value={searchQuery}
+                      onChange={(e) => { setSearchQuery(e.target.value); setSearchFocused(true); }}
+                      onFocus={() => setSearchFocused(true)}
+                      className="bg-transparent text-white placeholder-white/30 text-[14px] w-[280px] focus:outline-none"
+                      autoFocus
+                    />
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => { setSearchQuery(""); setSearchFocused(false); searchRef.current?.focus(); }}
+                        className="ml-2 text-white/30 hover:text-white transition-colors"
+                      >
+                        <X size={16} />
+                      </button>
+                    )}
+                  </div>
+                </form>
+
+                {/* Autosuggest dropdown */}
+                <AnimatePresence>
+                  {searchFocused && suggestions.length > 0 && (
+                    <motion.div
+                      className="absolute bottom-full mb-2 left-0 right-0 bg-black/70 backdrop-blur-xl rounded-xl border border-white/[0.12] overflow-hidden shadow-2xl"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 10 }}
+                      transition={{ duration: 0.15 }}
                     >
-                      <X size={16} />
-                    </button>
+                      {suggestions.map((b) => (
+                        <button
+                          key={b.id}
+                          className="w-full text-left px-4 py-2.5 hover:bg-white/[0.08] transition-colors flex items-center gap-3 group"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => selectSuggestion(b)}
+                        >
+                          <div
+                            className="w-2 h-2 rounded-full shrink-0"
+                            style={{ backgroundColor: RISK_COLORS[b.riskTier] }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-[13px] text-white/80 truncate">{b.address}</div>
+                            <div className="text-[11px] text-white/40 truncate">{b.tenant}{b.tenant && " · "}{b.propertyType}</div>
+                          </div>
+                          <span className="text-[11px] text-white/30 shrink-0">{b.riskScore}</span>
+                        </button>
+                      ))}
+                    </motion.div>
                   )}
-                  <button
-                    type="submit"
-                    disabled={isSearching}
-                    className="ml-3 px-4 py-1.5 bg-white/[0.12] text-white/90 rounded-xl text-[12px] font-medium hover:bg-white/[0.2] transition-colors disabled:opacity-50 border border-white/[0.1]"
-                  >
-                    {isSearching ? "..." : "Go"}
-                  </button>
-                </div>
-              </form>
+                </AnimatePresence>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
