@@ -1,8 +1,8 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useCallback } from "react";
-import { X, Eye, Target, Binary, Brain, Sparkles, GitBranch } from "lucide-react";
-import type { Building, RiskTier } from "../types";
-import { refreshBuilding, fetchDashboardBuildings } from "../api/client";
+import { X, Eye, Target, Binary, Brain, Sparkles, GitBranch, ChevronDown, FileText } from "lucide-react";
+import type { Building, RiskTier, EvidenceItem, EvidenceResponse } from "../types";
+import { refreshBuilding, fetchDashboardBuildings, fetchEvidence } from "../api/client";
 
 const RISK_COLORS: Record<RiskTier, string> = {
   critical: "#ef4444",
@@ -87,6 +87,58 @@ interface BuildingModalProps {
   onBuildingUpdate?: (building: Building) => void;
 }
 
+function StreetViewGallery({ buildingId }: { buildingId: string }) {
+  const directions = ["north", "east", "south", "west"];
+  return (
+    <div className="grid grid-cols-4 gap-1.5 mt-2">
+      {directions.map((dir) => (
+        <div key={dir} className="relative group">
+          <img
+            src={`/api/buildings/${buildingId}/streetview?direction=${dir}`}
+            alt={`Street view ${dir}`}
+            className="w-full aspect-[4/3] object-cover rounded-md bg-white/[0.03]"
+            loading="lazy"
+          />
+          <span className="absolute bottom-1 left-1 text-[9px] text-white/70 bg-black/60 px-1 rounded uppercase">
+            {dir}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EvidenceDetail({ data, buildingId, isVision }: { data: Record<string, unknown>; buildingId: string; isVision: boolean }) {
+  return (
+    <div className="space-y-2">
+      {isVision && <StreetViewGallery buildingId={buildingId} />}
+      <div className="space-y-1.5">
+        {Object.entries(data).map(([key, value]) => {
+          const label = key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+          return (
+            <div key={key} className="flex gap-2">
+              <span className="text-[11px] text-white/40 shrink-0 min-w-[80px]">{label}</span>
+              <span className="text-[11px] text-white/70">
+                {Array.isArray(value)
+                  ? value.length === 0
+                    ? "—"
+                    : value.map((v, i) => (
+                        <span key={i} className="inline-block mr-1 mb-1 px-1.5 py-0.5 bg-white/[0.06] rounded text-[10px]">
+                          {typeof v === "object" ? JSON.stringify(v) : String(v)}
+                        </span>
+                      ))
+                  : typeof value === "object" && value !== null
+                  ? JSON.stringify(value)
+                  : String(value ?? "—")}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function BuildingModal({
   building,
   isOpen,
@@ -99,9 +151,15 @@ export default function BuildingModal({
   const [localBuilding, setLocalBuilding] = useState<Building | null>(building);
   const [isPipelineRunning, setIsPipelineRunning] = useState(false);
   const [pipelineStep, setPipelineStep] = useState(0);
-  
+  const [evidence, setEvidence] = useState<EvidenceResponse | null>(null);
+  const [expandedSignal, setExpandedSignal] = useState<string | null>(null);
+
   useEffect(() => {
     setLocalBuilding(building);
+    setExpandedSignal(null);
+    if (building) {
+      fetchEvidence(building.id).then(setEvidence);
+    }
   }, [building]);
 
   const handleRerunPipeline = useCallback(async () => {
@@ -127,6 +185,7 @@ export default function BuildingModal({
         setLocalBuilding(updated);
         onBuildingUpdate?.(updated);
       }
+      fetchEvidence(localBuilding.id).then(setEvidence);
     } catch (error) {
       console.error("Pipeline failed:", error);
     } finally {
@@ -224,12 +283,12 @@ export default function BuildingModal({
                 <div className="grid grid-cols-2 gap-4 mb-8">
                   <div className="bg-white/[0.03] rounded-xl p-4 border border-white/[0.06]">
                     <div className="text-xs text-white/40 mb-1">Registered Use</div>
-                    <div className="text-sm text-white/90">{localBuilding.registeredUse}</div>
+                    <div className="text-sm text-white/90">{localBuilding.registeredUse || <span className="text-white/30 italic">Not specified</span>}</div>
                   </div>
                   <div className={`rounded-xl p-4 border ${localBuilding.useMismatch ? "bg-red-500/[0.04] border-red-500/20" : "bg-white/[0.03] border-white/[0.06]"}`}>
                     <div className="text-xs text-white/40 mb-1">Detected Use</div>
                     <div className={`text-sm ${localBuilding.useMismatch ? "text-red-400" : "text-white/90"}`}>
-                      {localBuilding.detectedUse}
+                      {localBuilding.detectedUse || <span className="text-white/30 italic">Pending analysis</span>}
                     </div>
                   </div>
                 </div>
@@ -238,13 +297,18 @@ export default function BuildingModal({
                 {localBuilding.signals.length > 0 && (
                   <div>
                     <h3 className="text-xs text-white/40 uppercase tracking-wider mb-4">Signal Timeline</h3>
-                    <div className="relative max-h-[200px] overflow-y-auto pr-2">
+                    <div className="relative max-h-[300px] overflow-y-auto pr-2">
                       {/* Timeline line */}
                       <div className="absolute left-[15px] top-3 bottom-3 w-px bg-white/[0.08]" />
-                      
+
                       <div className="space-y-1">
                         {localBuilding.signals.map((signal, index) => {
                           const isLatest = index === 0;
+                          const isExpanded = expandedSignal === signal.id;
+                          const evidenceItem = evidence?.evidence_items.find(
+                            (e) => `s${e.id}` === signal.id
+                          );
+                          const hasEvidence = !!evidenceItem?.raw_data;
                           return (
                             <div key={signal.id} className="flex gap-3 relative">
                               {/* Timeline node */}
@@ -259,16 +323,51 @@ export default function BuildingModal({
                                 />
                               </div>
                               </div>
-                              
+
                               {/* Content */}
                               <div className="flex-1 pb-4">
-                                <div className="flex items-baseline gap-2 mb-1">
-                                  <span className="text-xs text-white/70">{signal.source}</span>
-                                  <span className="text-[10px] text-white/30">
-                                    {new Date(signal.timestamp).toLocaleDateString()}
-                                  </span>
-                                </div>
-                                <p className="text-sm text-white/60 leading-relaxed">{signal.description}</p>
+                                <button
+                                  className="w-full text-left group"
+                                  onClick={() => hasEvidence && setExpandedSignal(isExpanded ? null : signal.id)}
+                                >
+                                  <div className="flex items-baseline gap-2 mb-1">
+                                    <span className="text-xs text-white/70">{signal.source}</span>
+                                    <span className="text-[10px] text-white/30">
+                                      {new Date(signal.timestamp).toLocaleDateString()}
+                                    </span>
+                                    {hasEvidence && (
+                                      <ChevronDown
+                                        size={12}
+                                        className={`text-white/30 group-hover:text-white/60 transition-all ${isExpanded ? "rotate-180" : ""}`}
+                                      />
+                                    )}
+                                  </div>
+                                  <p className="text-sm text-white/60 leading-relaxed">{signal.description}</p>
+                                </button>
+
+                                {/* Evidence Detail Panel */}
+                                <AnimatePresence>
+                                  {isExpanded && evidenceItem?.raw_data && (
+                                    <motion.div
+                                      initial={{ opacity: 0, height: 0 }}
+                                      animate={{ opacity: 1, height: "auto" }}
+                                      exit={{ opacity: 0, height: 0 }}
+                                      className="overflow-hidden"
+                                    >
+                                      <div className="mt-2 p-3 bg-white/[0.03] rounded-lg border border-white/[0.08]">
+                                        <div className="flex items-center gap-1.5 mb-2">
+                                          <FileText size={11} className="text-white/40" />
+                                          <span className="text-[10px] text-white/40 uppercase tracking-wider">Evidence</span>
+                                        </div>
+                                        <EvidenceDetail
+                                          data={evidenceItem.raw_data}
+                                          buildingId={localBuilding.id}
+                                          isVision={true}
+                                        />
+                                      </div>
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
                               </div>
                             </div>
                           );

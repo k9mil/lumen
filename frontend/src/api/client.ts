@@ -1,4 +1,4 @@
-import type { Building } from "../types";
+import type { Building, EvidenceResponse } from "../types";
 
 const API_BASE = "/api";
 
@@ -43,4 +43,13 @@ export async function refreshBuilding(buildingId: string): Promise<void> {
   await fetchJSON(`/buildings/${buildingId}/refresh`, {
     method: "POST",
   });
+}
+
+export async function fetchEvidence(buildingId: string): Promise<EvidenceResponse | null> {
+  const res = await fetch(`${API_BASE}/buildings/${buildingId}/evidence`, {
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data;
 }

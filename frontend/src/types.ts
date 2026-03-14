@@ -29,4 +29,32 @@ export interface Building {
   signals: Signal[];
 }
 
+export interface EvidenceItem {
+  id: number;
+  snapshot_id: number;
+  signal_type: string;
+  description: string;
+  weight: number;
+  raw_data: Record<string, unknown> | null;
+}
+
+export interface EvidenceSnapshot {
+  id: number;
+  building_id: number;
+  run_at: string;
+  geocode_data: Record<string, unknown> | null;
+  companies_house_data: Record<string, unknown> | null;
+  places_data: Record<string, unknown> | null;
+  street_view_analysis: Record<string, unknown> | null;
+  licensing_data: Record<string, unknown> | null;
+  risk_score: number;
+  risk_tier: string;
+}
+
+export interface EvidenceResponse {
+  snapshot: EvidenceSnapshot;
+  evidence_items: EvidenceItem[];
+  diff: Array<{ field: string; old: unknown; new: unknown; severity: string }> | null;
+}
+
 export type TabId = "all" | "needs_review";

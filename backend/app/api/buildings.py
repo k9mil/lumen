@@ -1,4 +1,5 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -167,6 +168,43 @@ async def get_evidence_route(building_id: int, db: AsyncSession = Depends(get_db
         evidence_items=[EvidenceItemResponse.model_validate(e) for e in evidence_items],
         diff=[DiffItem(**d) for d in diff] if diff else None,
     )
+
+
+HEADING_MAP = {"north": 0, "east": 90, "south": 180, "west": 270}
+
+
+@router.get("/{building_id}/streetview")
+async def get_streetview(
+    building_id: int,
+    direction: str = "north",
+    db: AsyncSession = Depends(get_db),
+):
+    """Proxy Google Street View image for a building."""
+    import httpx
+    from app.config import settings
+
+    building = await get_building(db, building_id)
+    if not building:
+        raise HTTPException(status_code=404, detail="Building not found")
+    if not building.lat or not building.lng:
+        raise HTTPException(status_code=404, detail="No coordinates")
+
+    heading = HEADING_MAP.get(direction.lower(), 0)
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            "https://maps.googleapis.com/maps/api/streetview",
+            params={
+                "size": "400x300",
+                "location": f"{building.lat},{building.lng}",
+                "heading": str(heading),
+                "pitch": "0",
+                "key": settings.GOOGLE_API_KEY,
+            },
+            timeout=10,
+        )
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="Street View unavailable")
+    return Response(content=resp.content, media_type="image/jpeg")
 
 
 @router.post("/{building_id}/refresh", status_code=202)
