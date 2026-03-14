@@ -1,4 +1,4 @@
-"""Pipeline service - connects agents to database."""
+"""Pipeline service - connects agents to database with confidence scoring."""
 
 import json
 import logging
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class PipelineService:
-    """Service for running pipelines and persisting results."""
+    """Service for running pipelines and persisting results with confidence."""
 
     def __init__(self, config: AgentConfig):
         self.config = config
@@ -26,16 +26,7 @@ class PipelineService:
     async def run_pipeline_for_building(
         self, db: AsyncSession, building_id: int, force: bool = False
     ) -> Snapshot:
-        """Run pipeline for a building and save snapshot.
-
-        Args:
-            db: Database session
-            building_id: ID of building to process
-            force: Run even if recently processed
-
-        Returns:
-            New snapshot with all pipeline data
-        """
+        """Run pipeline for a building and save snapshot."""
         # Fetch building
         result = await db.execute(select(Building).where(Building.id == building_id))
         building = result.scalar_one_or_none()
@@ -57,28 +48,46 @@ class PipelineService:
             previous_snapshot=previous_data,
         )
 
-        # Create snapshot
+        # Create snapshot with ALL data
         snapshot = Snapshot(
             building_id=building_id,
             geocode_data=pipeline_result.geocode_data,
             companies_house_data=pipeline_result.companies_house_data,
-            places_data=None,  # Not implemented yet
+            places_data=pipeline_result.places_data,
             street_view_analysis=pipeline_result.vision_data,
             licensing_data=pipeline_result.licensing_data,
+            # NEW: Additional data sources
+            food_hygiene_data=pipeline_result.food_hygiene_data,
+            crime_data=pipeline_result.crime_data,
+            review_sentiment_data=pipeline_result.review_data,
+            # Scoring with confidence
             risk_score=pipeline_result.score,
             risk_tier=pipeline_result.tier,
+            confidence=pipeline_result.confidence,  # NEW
         )
 
         db.add(snapshot)
         await db.flush()  # Get snapshot ID
 
-        # Create evidence items
+        # Create evidence items with confidence
         for item_data in pipeline_result.evidence_items:
             evidence = EvidenceItem(
                 snapshot_id=snapshot.id,
                 signal_type=self._map_signal_type(item_data.get("signal_type", "unknown")),
                 description=item_data.get("description", ""),
                 weight=item_data.get("weight", 0.0),
+                # NEW: Confidence fields
+                confidence=item_data.get("confidence", 0.8),
+                confidence_source_reliability=item_data.get("confidence_factors", {}).get(
+                    "source_reliability"
+                ),
+                confidence_data_freshness=item_data.get("confidence_factors", {}).get(
+                    "data_freshness"
+                ),
+                confidence_corroboration=item_data.get("confidence_factors", {}).get(
+                    "corroboration_count"
+                ),
+                source=item_data.get("source"),
                 raw_data=item_data.get("details"),
             )
             db.add(evidence)
@@ -90,7 +99,8 @@ class PipelineService:
 
         logger.info(
             f"Pipeline complete for building {building_id}: "
-            f"score={pipeline_result.score}, tier={pipeline_result.tier}"
+            f"score={pipeline_result.score}, tier={pipeline_result.tier}, "
+            f"confidence={pipeline_result.confidence:.0%}"
         )
 
         return snapshot
@@ -98,16 +108,7 @@ class PipelineService:
     async def run_pipeline_for_buildings(
         self, db: AsyncSession, building_ids: list[int], concurrency: int = 3
     ) -> list[Snapshot]:
-        """Run pipeline for multiple buildings concurrently.
-
-        Args:
-            db: Database session
-            building_ids: List of building IDs
-            concurrency: Max concurrent pipelines
-
-        Returns:
-            List of snapshots created
-        """
+        """Run pipeline for multiple buildings concurrently."""
         import asyncio
 
         semaphore = asyncio.Semaphore(concurrency)
@@ -117,7 +118,8 @@ class PipelineService:
             async with semaphore:
                 try:
                     # Create new session for each concurrent run
-                    return await self.run_pipeline_for_building(db, building_id)
+                    async for session in get_db():
+                        return await self.run_pipeline_for_building(session, building_id)
                 except Exception as e:
                     logger.error(f"Pipeline failed for building {building_id}: {e}")
                     return None
@@ -148,8 +150,10 @@ class PipelineService:
             "companies_house_data": snapshot.companies_house_data,
             "places_data": snapshot.places_data,
             "licensing_data": snapshot.licensing_data,
+            "food_hygiene_data": snapshot.food_hygiene_data,
             "score": snapshot.risk_score,
             "tier": snapshot.risk_tier,
+            "confidence": snapshot.confidence,
         }
 
     async def _update_building_status(
@@ -160,7 +164,7 @@ class PipelineService:
         previous_snapshot: Snapshot | None,
     ) -> None:
         """Update building status based on pipeline results."""
-        # Update score and tier
+        # Update score, tier, and confidence
         building.risk_score = pipeline_result.score
         building.risk_tier = pipeline_result.tier
         building.updated_at = datetime.utcnow()
@@ -183,27 +187,24 @@ class PipelineService:
     def _map_signal_type(self, signal_type: str) -> str:
         """Map pipeline signal type to database enum."""
         mapping = {
-            "cv_classification_change": SignalType.CV_CLASSIFICATION,
+            "cv_classification_change": SignalType.CV_CLASSIFICATION_CHANGE,
             "cv_classification_mismatch": SignalType.CV_CLASSIFICATION,
             "sic_mismatch": SignalType.SIC_MISMATCH,
             "licensing_nearby": SignalType.LICENSING,
             "keyword_hit": SignalType.KEYWORD_HIT,
+            "food_hygiene_poor": SignalType.FOOD_HYGIENE_POOR,
+            "food_hygiene_acceptable": SignalType.FOOD_HYGIENE_ACCEPTABLE,
+            "review_negative_trend": SignalType.REVIEW_NEGATIVE_TREND,
+            "review_closure_mentions": SignalType.REVIEW_CLOSURE_MENTIONS,
+            "crime_commercial_high": SignalType.CRIME_COMMERCIAL_HIGH,
+            "crime_commercial_medium": SignalType.CRIME_COMMERCIAL_MEDIUM,
         }
         return mapping.get(signal_type, signal_type)
 
     async def get_building_evidence(
         self, db: AsyncSession, building_id: int, snapshot_id: int | None = None
     ) -> list[EvidenceItem]:
-        """Get evidence items for a building.
-
-        Args:
-            db: Database session
-            building_id: Building ID
-            snapshot_id: Specific snapshot, or latest if None
-
-        Returns:
-            List of evidence items
-        """
+        """Get evidence items for a building."""
         if snapshot_id:
             result = await db.execute(
                 select(EvidenceItem)

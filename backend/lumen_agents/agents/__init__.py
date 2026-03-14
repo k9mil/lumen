@@ -8,6 +8,9 @@ from .vision import VisionAgent
 from .licensing import LicensingAgent
 from .scoring import ScoringAgent
 from .change_detection import ChangeDetectionAgent
+from .food_hygiene import FoodHygieneAgent
+from .crime import CrimeAgent
+from .review_sentiment import ReviewSentimentAgent
 
 __all__ = [
     "GeocodeAgent",
@@ -18,4 +21,7 @@ __all__ = [
     "LicensingAgent",
     "ScoringAgent",
     "ChangeDetectionAgent",
+    "FoodHygieneAgent",
+    "CrimeAgent",
+    "ReviewSentimentAgent",
 ]

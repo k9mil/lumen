@@ -8,7 +8,7 @@ Lumen is a property intelligence and risk assessment system for insurance compan
 
 ## Tech Stack
 
-- **Backend:** FastAPI (async Python), SQLAlchemy 2.0+ (async ORM), SQLite (aiosqlite), Pydantic 2.10+
+- **Backend:** Python 3.11, FastAPI (async), SQLAlchemy 2.0+ (async ORM), SQLite (aiosqlite), Pydantic 2.10+
 - **Frontend:** React 19, TypeScript, Vite 8, Tailwind CSS 3.4, Mapbox GL
 - **Package Managers:** uv (backend), npm (frontend)
 - **External APIs:** Google Maps (Geocoding, Places, Street View), Google Gemini (vision analysis), UK Companies House
@@ -18,9 +18,10 @@ Lumen is a property intelligence and risk assessment system for insurance compan
 ### Backend (from `backend/`)
 
 ```bash
-uv sync                                                    # Install dependencies
+uv sync                                                    # Install dependencies (add --dev for test/lint tools)
 uv run python -m uvicorn app.main:app --reload --port 8000 # Dev server
 uv run pytest                                              # Run all tests
+uv run pytest tests/test_foo.py::test_bar                  # Run a single test
 uv run ruff check .                                        # Lint
 ```
 
