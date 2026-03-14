@@ -18,6 +18,7 @@ class Settings(BaseSettings):
         return AgentConfig(
             google_api_key=self.GOOGLE_API_KEY,
             companies_house_api_key=self.COMPANIES_HOUSE_API_KEY,
+            gemini_api_key=self.GOOGLE_API_KEY,  # Uses same key for Gemini
             timeout_seconds=15.0,
             max_retries=2,
         )
