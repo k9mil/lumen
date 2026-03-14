@@ -24,6 +24,17 @@ logger = logging.getLogger(__name__)
 _semaphore = asyncio.Semaphore(5)
 
 
+def _types_compatible_quick(property_class: str, detected_use: str) -> bool:
+    """Quick check if detected use matches property class."""
+    if not property_class or not detected_use:
+        return True
+    pc = property_class.lower()
+    du = detected_use.lower()
+    if pc in du or du in pc:
+        return True
+    return False
+
+
 async def run_pipeline(building_id: int) -> None:
     """Run the full intelligence pipeline for a building."""
     async with _semaphore:
@@ -161,5 +172,10 @@ async def _run_pipeline_inner(building_id: int, db) -> None:
     # Update building
     building.risk_score = score
     building.risk_tier = tier
+    if street_view_analysis:
+        building.detected_use = street_view_analysis.get("occupier_type", "")
+        building.use_mismatch = not _types_compatible_quick(
+            building.property_class or "", building.detected_use or ""
+        )
     await db.commit()
     logger.info(f"Pipeline completed for building {building_id}: score={score}, tier={tier}")

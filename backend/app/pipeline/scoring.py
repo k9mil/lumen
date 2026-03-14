@@ -2,12 +2,29 @@ KEYWORD_LIST = [
     "vape", "shisha", "tobacco", "hookah", "late-night", "kitchen",
     "takeaway", "off-licence", "betting", "gambling", "pawnbroker",
     "money transfer", "car wash", "hand car wash", "tanning",
+    "cash only", "no card", "24 hour", "massage", "nail bar",
+    "phone repair", "e-cigarette", "cbd", "crypto", "atm",
+    "bureau de change", "payday loan", "check cashing",
 ]
+
+RISK_FLAGS = {
+    "vacant": 25,
+    "change_of_use": 30,
+    "multiple_occupiers": 20,
+    "signage_mismatch": 20,
+    "scaffolding": 10,
+    "boarded_up": 25,
+    "derelict": 25,
+    "under_construction": 10,
+}
 
 WEIGHT_CV_CLASSIFICATION = 40
 WEIGHT_SIC_MISMATCH = 25
 WEIGHT_LICENSING = 20
 WEIGHT_KEYWORD_HIT = 15
+WEIGHT_DISSOLVED_COMPANY = 20
+WEIGHT_MULTIPLE_COMPANIES = 15
+WEIGHT_LOW_CONFIDENCE = 10
 
 
 def calculate_risk_score(evidence_items: list[dict]) -> tuple[int, str]:
@@ -45,6 +62,7 @@ def create_evidence_items(
     if vision_data:
         occupier_type = vision_data.get("occupier_type", "").lower()
         flags = vision_data.get("flags", [])
+        confidence = vision_data.get("confidence", 1.0)
 
         # Check for change vs previous
         if previous_vision:
@@ -78,6 +96,26 @@ def create_evidence_items(
                     },
                 })
 
+        # Flag risk-relevant vision flags
+        for flag in flags:
+            flag_lower = flag.lower().replace(" ", "_")
+            if flag_lower in RISK_FLAGS:
+                items.append({
+                    "signal_type": "cv_classification",
+                    "description": f"Street view flag: {flag.replace('_', ' ')}",
+                    "weight": RISK_FLAGS[flag_lower],
+                    "raw_data": {"flag": flag, "confidence": confidence},
+                })
+
+        # Low confidence from vision model
+        if confidence < 0.6:
+            items.append({
+                "signal_type": "cv_classification",
+                "description": f"Low vision model confidence ({confidence:.0%}) — property may be obscured or ambiguous",
+                "weight": WEIGHT_LOW_CONFIDENCE,
+                "raw_data": {"confidence": confidence},
+            })
+
     # SIC code mismatch
     if company_data and property_class:
         companies = company_data.get("companies", [])
@@ -98,6 +136,32 @@ def create_evidence_items(
                     },
                 })
                 break  # Only flag once per building
+
+    # Dissolved or inactive companies at the address
+    if company_data:
+        companies = company_data.get("companies", [])
+        dissolved = [
+            c for c in companies
+            if c.get("company_status", "").lower() in ("dissolved", "liquidation", "administration")
+        ]
+        if dissolved:
+            names = ", ".join(c.get("company_name", "") for c in dissolved[:3])
+            items.append({
+                "signal_type": "sic_mismatch",
+                "description": f"{len(dissolved)} dissolved/inactive company(ies) registered at address: {names}",
+                "weight": WEIGHT_DISSOLVED_COMPANY,
+                "raw_data": {"dissolved_companies": [c.get("company_name") for c in dissolved]},
+            })
+
+        # Multiple active companies at same address
+        active = [c for c in companies if c.get("company_status", "").lower() == "active"]
+        if len(active) >= 3:
+            items.append({
+                "signal_type": "sic_mismatch",
+                "description": f"{len(active)} active companies registered at this address",
+                "weight": WEIGHT_MULTIPLE_COMPANIES,
+                "raw_data": {"active_count": len(active), "companies": [c.get("company_name") for c in active]},
+            })
 
     # Licensing
     if licensing_data and licensing_data.get("found"):
@@ -141,7 +205,6 @@ def create_evidence_items(
 
 def _types_compatible(property_class: str, occupier_type: str) -> bool:
     """Basic heuristic: check if occupier type is broadly compatible with property class."""
-    # Very simple matching — can be refined with a proper taxonomy
     class_lower = property_class.lower()
     occ_lower = occupier_type.lower()
 
@@ -149,9 +212,10 @@ def _types_compatible(property_class: str, occupier_type: str) -> bool:
         return True
 
     compatible_map = {
-        "office": ["office", "professional", "consultancy", "studio"],
-        "retail": ["shop", "store", "retail", "boutique", "salon"],
-        "restaurant": ["restaurant", "cafe", "food", "dining", "bistro"],
+        "office": ["office", "professional", "consultancy", "studio", "coworking"],
+        "retail": ["shop", "store", "retail", "boutique", "salon", "pharmacy", "optician"],
+        "restaurant": ["restaurant", "cafe", "food", "dining", "bistro", "pizza", "italian", "indian", "chinese", "thai"],
+        "bar": ["bar", "pub", "tavern", "lounge", "nightclub"],
         "warehouse": ["warehouse", "storage", "industrial", "distribution"],
         "residential": ["residential", "flat", "apartment", "house"],
     }
@@ -160,12 +224,11 @@ def _types_compatible(property_class: str, occupier_type: str) -> bool:
         if cls in class_lower:
             return any(t in occ_lower for t in terms)
 
-    return True  # Default to compatible if we can't determine
+    return False  # Default: flag unknown combinations
 
 
 def _sic_matches_class(sic_codes: list[str], property_class: str) -> bool:
     """Check if SIC codes are broadly compatible with property class."""
-    # SIC codes: 47xxx = retail, 56xxx = food/beverage, 68xxx = real estate, etc.
     class_lower = property_class.lower()
 
     retail_sics = any(s.startswith("47") for s in sic_codes)
@@ -183,5 +246,7 @@ def _sic_matches_class(sic_codes: list[str], property_class: str) -> bool:
         return True
     if "office" in class_lower and office_sics:
         return True
+    if "bar" in class_lower and food_sics:
+        return True
 
-    return True  # Default to compatible
+    return False  # Default: flag when SIC doesn't match known categories

@@ -87,7 +87,7 @@ export default function Sidebar({ onAddProperty }: SidebarProps) {
       <div className="px-3 mb-4">
         <button
           onClick={onAddProperty}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-violet-500 to-indigo-500 text-white text-[13px] font-medium rounded-xl hover:from-violet-400 hover:to-indigo-400 transition-all shadow-lg shadow-violet-500/20"
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-cyan-600 text-white text-[13px] font-medium rounded-xl hover:from-blue-500 hover:to-cyan-500 transition-all shadow-lg shadow-blue-600/20"
         >
           <Plus size={16} />
           Add Property
