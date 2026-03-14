@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
 import { useBuildings } from "./hooks/useBuildings";
-import type { TabId, RiskTier } from "./types";
+import type { TabId, RiskTier, Building } from "./types";
 import Sidebar from "./components/Sidebar";
 import TopBar from "./components/TopBar";
 import Header from "./components/Header";
@@ -10,13 +10,12 @@ import PipelineTabs from "./components/PipelineTabs";
 import SearchFilterBar from "./components/SearchFilterBar";
 import BuildingsTable from "./components/BuildingsTable";
 import BuildingModal from "./components/BuildingModal";
+import OnboardingModal from "./components/OnboardingModal";
 
 export default function App() {
   const {
     buildings,
     setBuildings,
-    loading,
-    error,
   } = useBuildings();
 
   const [activeTab, setActiveTab] = useState<TabId>("all");
@@ -28,6 +27,7 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [flyToId, setFlyToId] = useState<string | null>(null);
   const [isMapFullscreen, setIsMapFullscreen] = useState(false);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
 
   const tabCounts = useMemo(
     () => ({
@@ -121,11 +121,6 @@ export default function App() {
     setSelectedId(null);
   }, []);
 
-  const handleRequestSurvey = useCallback((_id: string) => {
-    // In production: trigger loss control survey request
-    setSelectedId(null);
-  }, []);
-
   const handleFlagForRenewal = useCallback((id: string) => {
     // In production: mark for terms change at next renewal
     setBuildings((prev) =>
@@ -140,10 +135,20 @@ export default function App() {
     setIsMapFullscreen(isFullscreen);
   }, []);
 
+  const handleOpenOnboarding = useCallback(() => {
+    setIsOnboardingOpen(true);
+  }, []);
+
+  const handleBuildingCreated = useCallback((building: Building) => {
+    setBuildings((prev) => [building, ...prev]);
+    setFlyToId(building.id);
+    setSelectedId(building.id);
+  }, [setBuildings]);
+
   return (
     <div className="h-screen w-screen bg-[#0a0a0b] overflow-hidden flex">
       {/* Sidebar - navigation */}
-      <Sidebar />
+      <Sidebar onAddProperty={handleOpenOnboarding} />
 
       {/* Main content */}
       <div className={`flex-1 flex flex-col min-h-0 ${isMapFullscreen ? 'pointer-events-none' : ''}`}>
@@ -204,8 +209,14 @@ export default function App() {
         onAcceptRisk={handleAcceptRisk}
         onDecline={handleDecline}
         onRefer={handleRefer}
-        onRequestSurvey={handleRequestSurvey}
         onFlagForRenewal={handleFlagForRenewal}
+      />
+
+      {/* Onboarding Modal */}
+      <OnboardingModal
+        isOpen={isOnboardingOpen}
+        onClose={() => setIsOnboardingOpen(false)}
+        onBuildingCreated={handleBuildingCreated}
       />
     </div>
   );

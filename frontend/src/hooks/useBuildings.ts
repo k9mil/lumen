@@ -75,6 +75,7 @@ export function useBuildings() {
 
   return {
     buildings,
+    setBuildings,
     loading,
     error,
     refresh,

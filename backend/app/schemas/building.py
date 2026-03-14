@@ -6,6 +6,11 @@ from pydantic import BaseModel, ConfigDict
 class BuildingCreate(BaseModel):
     address: str
     property_class: str = ""
+    property_type: str | None = None
+    tenant: str | None = None
+    registered_use: str | None = None
+    listed: bool = False
+    insurer_id: int | None = None
 
 
 class BuildingBulkUpload(BaseModel):
@@ -46,6 +51,7 @@ class SignalResponse(BaseModel):
 
 class DashboardBuildingResponse(BaseModel):
     """Building response shaped for the frontend dashboard."""
+
     id: str
     address: str
     tenant: str

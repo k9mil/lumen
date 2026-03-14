@@ -3,8 +3,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.building import Building
+from app.models.insurer import Insurer
 from app.models.snapshot import Snapshot
-from app.models.evidence_item import EvidenceItem
+
+
+async def get_or_create_default_insurer(db: AsyncSession) -> Insurer:
+    """Get the first insurer or create a default one."""
+    result = await db.execute(select(Insurer).limit(1))
+    insurer = result.scalar_one_or_none()
+    if not insurer:
+        insurer = Insurer(name="Default Insurer")
+        db.add(insurer)
+        await db.flush()
+    return insurer
 
 
 async def list_buildings(
@@ -47,6 +58,40 @@ async def get_building(db: AsyncSession, building_id: int) -> Building | None:
     return result.scalar_one_or_none()
 
 
+async def create_building(
+    db: AsyncSession,
+    *,
+    address: str,
+    property_class: str = "",
+    property_type: str | None = None,
+    tenant: str | None = None,
+    registered_use: str | None = None,
+    listed: bool = False,
+    insurer_id: int | None = None,
+) -> Building:
+    """Create a new building. If no insurer_id provided, uses the default insurer."""
+    if insurer_id is None:
+        insurer = await get_or_create_default_insurer(db)
+        insurer_id = insurer.id
+
+    building = Building(
+        insurer_id=insurer_id,
+        address=address,
+        property_class=property_class,
+        property_type=property_type,
+        tenant=tenant,
+        registered_use=registered_use,
+        listed=listed,
+        status="active",
+        risk_score=0,
+        risk_tier="low",
+    )
+    db.add(building)
+    await db.flush()
+    await db.refresh(building)
+    return building
+
+
 async def get_building_evidence(db: AsyncSession, building_id: int):
     """Get latest snapshot with evidence items, plus diff against previous snapshot."""
     result = await db.execute(
@@ -83,17 +128,21 @@ def _compute_diff(current: Snapshot, previous: Snapshot) -> list[dict]:
         curr_val = getattr(current, field)
         prev_val = getattr(previous, field)
         if curr_val != prev_val:
-            diffs.append({
-                "field": label,
-                "old": prev_val,
-                "new": curr_val,
-                "severity": "warning",
-            })
+            diffs.append(
+                {
+                    "field": label,
+                    "old": prev_val,
+                    "new": curr_val,
+                    "severity": "warning",
+                }
+            )
     if current.risk_score != previous.risk_score:
-        diffs.append({
-            "field": "Risk score",
-            "old": previous.risk_score,
-            "new": current.risk_score,
-            "severity": "high" if current.risk_score > previous.risk_score else "info",
-        })
+        diffs.append(
+            {
+                "field": "Risk score",
+                "old": previous.risk_score,
+                "new": current.risk_score,
+                "severity": "high" if current.risk_score > previous.risk_score else "info",
+            }
+        )
     return diffs

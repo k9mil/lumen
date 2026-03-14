@@ -2,10 +2,10 @@ import { useState } from "react";
 import { 
   LayoutGrid, 
   Building2, 
-  Bell, 
   BarChart3, 
   Settings, 
-  ChevronDown 
+  ChevronDown,
+  Plus
 } from "lucide-react";
 
 interface NavItem {
@@ -13,6 +13,10 @@ interface NavItem {
   label: string;
   icon: React.ReactNode;
   count?: number;
+}
+
+interface SidebarProps {
+  onAddProperty: () => void;
 }
 
 const navItems: NavItem[] = [
@@ -26,12 +30,6 @@ const navItems: NavItem[] = [
     label: "Properties",
     icon: <Building2 size={18} strokeWidth={1.5} />,
     count: 12,
-  },
-  {
-    id: "alerts",
-    label: "Alerts",
-    icon: <Bell size={18} strokeWidth={1.5} />,
-    count: 5,
   },
   {
     id: "analytics",
@@ -68,7 +66,7 @@ function LumenLogo({ className = "" }: { className?: string }) {
   );
 }
 
-export default function Sidebar() {
+export default function Sidebar({ onAddProperty }: SidebarProps) {
   const [activeItem, setActiveItem] = useState("dashboard");
 
   return (
@@ -83,6 +81,17 @@ export default function Sidebar() {
             lumen
           </span>
         </div>
+      </div>
+
+      {/* Add Property Button */}
+      <div className="px-3 mb-4">
+        <button
+          onClick={onAddProperty}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-violet-500 to-indigo-500 text-white text-[13px] font-medium rounded-xl hover:from-violet-400 hover:to-indigo-400 transition-all shadow-lg shadow-violet-500/20"
+        >
+          <Plus size={16} />
+          Add Property
+        </button>
       </div>
 
       {/* Navigation */}
