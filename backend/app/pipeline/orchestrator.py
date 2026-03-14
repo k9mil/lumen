@@ -162,3 +162,4 @@ async def _run_pipeline_inner(building_id: int, db) -> None:
     building.risk_score = score
     building.risk_tier = tier
     await db.commit()
+    logger.info(f"Pipeline completed for building {building_id}: score={score}, tier={tier}")
