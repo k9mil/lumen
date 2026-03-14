@@ -1,7 +1,8 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { useState } from "react";
-import { X, Check, Building2, AlertTriangle, Clock, Eye, FileText, Shield, ClipboardList, Flag, ChevronDown, UserCheck, Users, Scale } from "lucide-react";
-import type { Building, RiskTier, Signal } from "../types";
+import { useState, useEffect, useCallback } from "react";
+import { X, Eye, Shield, Zap, Globe, Search, Building as BuildingIcon } from "lucide-react";
+import type { Building, RiskTier } from "../types";
+import { refreshBuilding, fetchDashboardBuildings } from "../api/client";
 
 const RISK_COLORS: Record<RiskTier, string> = {
   critical: "#ef4444",
@@ -17,51 +18,14 @@ const RISK_LABELS: Record<RiskTier, string> = {
   low: "Low",
 };
 
-const SOURCE_COLORS: Record<string, string> = {
-  "Vision Model": "text-violet-400 bg-violet-500/10 border-violet-500/20",
-  "Council Rates": "text-amber-400 bg-amber-500/10 border-amber-500/20",
-  "Companies House": "text-blue-400 bg-blue-500/10 border-blue-500/20",
-  "Street View": "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-  "Building Survey": "text-slate-400 bg-slate-500/10 border-slate-500/20",
-  "Fire Service": "text-red-400 bg-red-500/10 border-red-500/20",
-  "Health & Safety": "text-orange-400 bg-orange-500/10 border-orange-500/20",
-  "Council Planning": "text-indigo-400 bg-indigo-500/10 border-indigo-500/20",
-  "Licensing Board": "text-purple-400 bg-purple-500/10 border-purple-500/20",
-  "Flood Risk": "text-cyan-400 bg-cyan-500/10 border-cyan-500/20",
-  "Environmental Health": "text-lime-400 bg-lime-500/10 border-lime-500/20",
-  "Routine Check": "text-white/50 bg-white/5 border-white/10",
-};
-
-const SOURCE_ICONS: Record<string, typeof Eye> = {
-  "Vision Model": Eye,
-  "Council Rates": FileText,
-  "Companies House": Building2,
-  "Street View": Eye,
-  "Building Survey": Shield,
-  "Fire Service": AlertTriangle,
-  "Health & Safety": Shield,
-  "Council Planning": FileText,
-  "Licensing Board": FileText,
-  "Flood Risk": AlertTriangle,
-  "Environmental Health": Shield,
-  "Routine Check": Check,
-};
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-}
-
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-}
-
-function daysBetween(iso1: string, iso2: string): number {
-  const d1 = new Date(iso1);
-  const d2 = new Date(iso2);
-  return Math.round(Math.abs(d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
-}
+const PIPELINE_STEPS = [
+  { icon: Globe, label: "Geocode", duration: 2000 },
+  { icon: BuildingIcon, label: "Companies", duration: 3000 },
+  { icon: Search, label: "Places", duration: 2500 },
+  { icon: Eye, label: "Street View", duration: 4000 },
+  { icon: Zap, label: "Vision AI", duration: 8000 },
+  { icon: Shield, label: "Score", duration: 2000 },
+];
 
 interface BuildingModalProps {
   building: Building | null;
@@ -70,7 +34,7 @@ interface BuildingModalProps {
   onAcceptRisk: (id: string) => void;
   onDecline: (id: string) => void;
   onRefer: (id: string, target: string) => void;
-  onFlagForRenewal: (id: string) => void;
+  onBuildingUpdate?: (building: Building) => void;
 }
 
 export default function BuildingModal({
@@ -80,232 +44,269 @@ export default function BuildingModal({
   onAcceptRisk,
   onDecline,
   onRefer,
-  onFlagForRenewal,
+  onBuildingUpdate,
 }: BuildingModalProps) {
-  const [showReferMenu, setShowReferMenu] = useState(false);
+  const [localBuilding, setLocalBuilding] = useState<Building | null>(building);
+  const [isPipelineRunning, setIsPipelineRunning] = useState(false);
+  const [pipelineStep, setPipelineStep] = useState(0);
   
-  if (!building) return null;
+  useEffect(() => {
+    setLocalBuilding(building);
+  }, [building]);
+
+  const handleRerunPipeline = useCallback(async () => {
+    if (!localBuilding) return;
+    
+    setIsPipelineRunning(true);
+    setPipelineStep(0);
+    
+    try {
+      await refreshBuilding(localBuilding.id);
+      
+      for (let i = 0; i < PIPELINE_STEPS.length; i++) {
+        setPipelineStep(i);
+        await new Promise(resolve => setTimeout(resolve, PIPELINE_STEPS[i].duration));
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const updatedBuildings = await fetchDashboardBuildings();
+      const updated = updatedBuildings.find(b => b.id === localBuilding.id);
+      if (updated) {
+        setLocalBuilding(updated);
+        onBuildingUpdate?.(updated);
+      }
+    } catch (error) {
+      console.error("Pipeline failed:", error);
+    } finally {
+      setIsPipelineRunning(false);
+      setPipelineStep(0);
+    }
+  }, [localBuilding, onBuildingUpdate]);
+
+  if (!localBuilding) return null;
 
   return (
     <AnimatePresence>
       {isOpen && (
         <>
           <motion.div
-            className="fixed inset-0 z-40 bg-black/40"
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.4, ease: "easeOut" }}
             onClick={onClose}
           />
 
-          <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-6 pointer-events-none">
             <motion.div
-              className="bg-[#0f0f10] rounded-2xl shadow-2xl overflow-hidden border border-white/[0.08] pointer-events-auto w-[85vw] max-w-[1050px]"
-              style={{ maxHeight: "80vh" }}
-              initial={{ opacity: 0, scale: 0.85, y: 30 }}
+              className="bg-[#111] rounded-2xl shadow-2xl overflow-hidden border border-white/[0.08] pointer-events-auto w-full max-w-2xl max-h-[85vh] flex flex-col"
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              transition={{ type: "spring", stiffness: 200, damping: 25, mass: 1.2 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
             >
-              <div className="flex flex-col" style={{ maxHeight: "80vh" }}>
-                <motion.div
-                  className="px-8 py-6 border-b border-white/[0.06] flex items-start justify-between shrink-0"
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.2, duration: 0.4 }}
+              {/* Header */}
+              <div className="px-6 py-5 border-b border-white/[0.06] flex items-center justify-between shrink-0">
+                <div>
+                  <h2 className="text-lg font-medium text-white">{localBuilding.address}</h2>
+                  <p className="text-sm text-white/50 mt-0.5">{localBuilding.tenant}</p>
+                </div>
+                <button
+                  onClick={onClose}
+                  className="text-white/40 hover:text-white p-2 hover:bg-white/[0.06] rounded-lg transition-colors"
                 >
-                  <div>
-                    <div className="flex items-center gap-3 mb-2">
-                      <Building2 size={20} className="text-white/40" />
-                      <h2 className="text-[22px] font-semibold text-white">{building.address}</h2>
-                    </div>
-                    <div className="flex items-center gap-3 text-[13px]">
-                      <span className="text-white/50">{building.tenant}</span>
-                      <span className="text-white/20">·</span>
-                      <span className="text-white/50">{building.propertyType}</span>
-                      {building.listed && (
-                        <>
-                          <span className="text-white/20">·</span>
-                          <span className="text-[11px] font-medium text-indigo-300 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">Listed Building</span>
-                        </>
-                      )}
-                      {building.useMismatch && (
-                        <>
-                          <span className="text-white/20">·</span>
-                          <span className="text-[11px] font-medium text-red-300 bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20 flex items-center gap-1">
-                            <AlertTriangle size={10} />
-                            Use Mismatch
-                          </span>
-                        </>
-                      )}
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-auto p-6">
+                {/* Risk Score */}
+                <div className="flex items-center gap-6 mb-8">
+                  <div className="relative w-28 h-28">
+                    <svg className="absolute inset-0 w-full h-full -rotate-90">
+                      <circle cx="56" cy="56" r="48" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="8" />
+                      <circle
+                        cx="56"
+                        cy="56"
+                        r="48"
+                        fill="none"
+                        stroke={RISK_COLORS[localBuilding.riskTier]}
+                        strokeWidth="8"
+                        strokeLinecap="round"
+                        strokeDasharray={`${(localBuilding.riskScore / 100) * 301} 301`}
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-3xl font-semibold" style={{ color: RISK_COLORS[localBuilding.riskTier] }}>
+                        {localBuilding.riskScore}
+                      </span>
+                      <span className="text-xs text-white/40 uppercase tracking-wider">Risk</span>
                     </div>
                   </div>
-                  <button onClick={onClose} className="text-white/40 hover:text-white p-2 hover:bg-white/[0.06] rounded-lg transition-all">
-                    <X size={20} />
-                  </button>
-                </motion.div>
-
-                <div className="flex-1 overflow-auto min-h-0">
-                  <div className="flex min-h-0">
-                    <motion.div
-                      className="w-[340px] shrink-0 border-r border-white/[0.06] p-8"
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.25, duration: 0.45 }}
-                    >
-                      <div className="flex flex-col items-center mb-8">
-                        <div className="relative w-44 h-44 flex items-center justify-center mb-4">
-                          <svg className="absolute inset-0 w-full h-full -rotate-90">
-                            <circle cx="88" cy="88" r="76" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="10" />
-                            <motion.circle
-                              cx="88" cy="88" r="76" fill="none" stroke={RISK_COLORS[building.riskTier]} strokeWidth="10" strokeLinecap="round"
-                              strokeDasharray={`${(building.riskScore / 100) * 478} 478`}
-                              initial={{ strokeDasharray: "0 478" }}
-                              animate={{ strokeDasharray: `${(building.riskScore / 100) * 478} 478` }}
-                              transition={{ duration: 1, ease: "easeOut", delay: 0.3 }}
-                            />
-                          </svg>
-                          <div className="text-center">
-                            <motion.div className="text-[52px] font-bold font-mono leading-none" style={{ color: RISK_COLORS[building.riskTier] }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}>
-                              {building.riskScore}
-                            </motion.div>
-                            <div className="text-[11px] text-white/40 uppercase tracking-wider mt-1">Risk Score</div>
-                          </div>
-                        </div>
-                        <span className="px-4 py-1.5 rounded-full text-[12px] font-semibold border" style={{ color: RISK_COLORS[building.riskTier], backgroundColor: `${RISK_COLORS[building.riskTier]}15`, borderColor: `${RISK_COLORS[building.riskTier]}30` }}>
-                          {RISK_LABELS[building.riskTier]} Risk
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <span
+                        className="px-3 py-1 rounded-full text-xs font-medium border"
+                        style={{
+                          color: RISK_COLORS[localBuilding.riskTier],
+                          backgroundColor: `${RISK_COLORS[localBuilding.riskTier]}15`,
+                          borderColor: `${RISK_COLORS[localBuilding.riskTier]}30`
+                        }}
+                      >
+                        {RISK_LABELS[localBuilding.riskTier]} Risk
+                      </span>
+                      {localBuilding.useMismatch && (
+                        <span className="px-3 py-1 rounded-full text-xs font-medium border border-red-500/30 text-red-400 bg-red-500/10">
+                          Use Mismatch
                         </span>
-                      </div>
+                      )}
+                    </div>
+                    <p className="text-sm text-white/60">
+                      {localBuilding.propertyType} · {localBuilding.signals.length} signals · {new Date(localBuilding.lastUpdated).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
 
-                      <div className="mb-6">
-                        <h3 className="text-[11px] text-white/40 uppercase tracking-wider mb-3 flex items-center gap-2">
-                          <FileText size={12} /> Use Classification
-                        </h3>
-                        <div className="space-y-3">
-                          <div className="bg-white/[0.03] rounded-xl p-4 border border-white/[0.06]">
-                            <div className="text-[11px] text-white/40 mb-1.5">Registered</div>
-                            <div className="text-[14px] font-medium text-white/90">{building.registeredUse}</div>
-                          </div>
-                          <div className={`rounded-xl p-4 border ${building.useMismatch ? "bg-red-500/[0.06] border-red-500/20" : "bg-white/[0.03] border-white/[0.06]"}`}>
-                            <div className="text-[11px] text-white/40 mb-1.5">Detected</div>
-                            <div className={`text-[14px] font-medium ${building.useMismatch ? "text-red-400" : "text-white/90"}`}>{building.detectedUse}</div>
-                            {building.useMismatch && (
-                              <div className="flex items-center gap-1.5 mt-2.5 text-[11px] text-red-400 font-medium">
-                                <AlertTriangle size={12} /> Classification mismatch — investigate
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                {/* Classification */}
+                <div className="grid grid-cols-2 gap-4 mb-8">
+                  <div className="bg-white/[0.03] rounded-xl p-4 border border-white/[0.06]">
+                    <div className="text-xs text-white/40 mb-1">Registered Use</div>
+                    <div className="text-sm text-white/90">{localBuilding.registeredUse}</div>
+                  </div>
+                  <div className={`rounded-xl p-4 border ${localBuilding.useMismatch ? "bg-red-500/[0.04] border-red-500/20" : "bg-white/[0.03] border-white/[0.06]"}`}>
+                    <div className="text-xs text-white/40 mb-1">Detected Use</div>
+                    <div className={`text-sm ${localBuilding.useMismatch ? "text-red-400" : "text-white/90"}`}>
+                      {localBuilding.detectedUse}
+                    </div>
+                  </div>
+                </div>
 
-                      <div>
-                        <h3 className="text-[11px] text-white/40 uppercase tracking-wider mb-3">Summary</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="bg-white/[0.03] rounded-lg p-3 border border-white/[0.06]">
-                            <div className="text-[20px] font-semibold text-white font-mono">{building.signals.length}</div>
-                            <div className="text-[10px] text-white/40">Signals</div>
-                          </div>
-                          <div className="bg-white/[0.03] rounded-lg p-3 border border-white/[0.06]">
-                            <div className="text-[20px] font-semibold text-white font-mono">
-                              {building.signals.filter((s: Signal) => s.severity === "critical" || s.severity === "high").length}
-                            </div>
-                            <div className="text-[10px] text-white/40">High / Critical</div>
-                          </div>
-                        </div>
-                      </div>
-                    </motion.div>
-
-                    <motion.div className="flex-1 p-8 overflow-auto" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3, duration: 0.45 }}>
-                      <h3 className="text-[11px] text-white/40 uppercase tracking-wider mb-6 flex items-center gap-2">
-                        <Clock size={12} /> Signal Timeline
-                      </h3>
-                      <div className="relative">
-                        <div className="absolute left-[19px] top-3 bottom-0 w-px bg-white/[0.06]" />
-                        {building.signals.map((signal: Signal, i: number) => {
-                          const sourceStyle = SOURCE_COLORS[signal.source] || "text-white/50 bg-white/5 border-white/10";
-                          const IconComponent = SOURCE_ICONS[signal.source] || FileText;
-                          const isFirst = i === 0;
-                          const dayGap = i > 0 ? daysBetween(building.signals[i - 1].timestamp, signal.timestamp) : 0;
+                {/* Signals Timeline */}
+                {localBuilding.signals.length > 0 && (
+                  <div>
+                    <h3 className="text-xs text-white/40 uppercase tracking-wider mb-4">Signal Timeline</h3>
+                    <div className="relative max-h-[200px] overflow-y-auto pr-2">
+                      {/* Timeline line */}
+                      <div className="absolute left-[15px] top-3 bottom-3 w-px bg-white/[0.08]" />
+                      
+                      <div className="space-y-1">
+                        {localBuilding.signals.map((signal, index) => {
+                          const isLatest = index === 0;
                           return (
-                            <motion.div key={signal.id} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.25 + i * 0.08 }}>
-                              {dayGap > 0 && (
-                                <div className="flex items-center gap-3 ml-[11px] py-2">
-                                  <div className="w-[17px] flex justify-center"><div className="w-1.5 h-1.5 rounded-full bg-white/[0.08]" /></div>
-                                  <span className="text-[10px] text-white/20 font-mono">{dayGap}d gap</span>
-                                </div>
-                              )}
-                              <div className="flex gap-4 relative">
-                                <div className="flex flex-col items-center shrink-0 w-[38px]">
-                                  <div className={`w-[38px] h-[38px] rounded-xl flex items-center justify-center border ${isFirst ? "ring-2 ring-offset-2 ring-offset-[#0f0f10]" : ""}`}
-                                    style={{ backgroundColor: `${RISK_COLORS[signal.severity]}15`, borderColor: `${RISK_COLORS[signal.severity]}30`, ...(isFirst ? { ringColor: `${RISK_COLORS[signal.severity]}40` } : {}) }}
-                                  >
-                                    <IconComponent size={16} style={{ color: RISK_COLORS[signal.severity] }} />
-                                  </div>
-                                </div>
-                                <div className={`flex-1 mb-5 rounded-xl p-4 border transition-colors hover:bg-white/[0.03] ${signal.severity === "critical" ? "bg-red-500/[0.04] border-red-500/15" : "bg-white/[0.02] border-white/[0.06]"}`}>
-                                  <div className="flex items-center justify-between mb-2">
-                                    <div className="flex items-center gap-2">
-                                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${sourceStyle}`}>{signal.source}</span>
-                                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ color: RISK_COLORS[signal.severity], backgroundColor: `${RISK_COLORS[signal.severity]}15` }}>
-                                        {signal.severity.charAt(0).toUpperCase() + signal.severity.slice(1)}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center gap-2 text-[11px] text-white/30 font-mono">
-                                      <span>{formatDate(signal.timestamp)}</span>
-                                      <span className="text-white/15">·</span>
-                                      <span>{formatTime(signal.timestamp)}</span>
-                                    </div>
-                                  </div>
-                                  <p className="text-[13px] text-white/75 leading-relaxed">{signal.description}</p>
-                                </div>
+                            <div key={signal.id} className="flex gap-3 relative">
+                              {/* Timeline node */}
+                              <div className="flex flex-col items-center shrink-0 w-[30px]">
+                                <div className={`${isLatest ? "p-0.5 rounded-full" : ""}`} style={isLatest ? { backgroundColor: `${RISK_COLORS[signal.severity]}40` } : {}}>
+                                <div
+                                  className="w-3 h-3 rounded-full border-2"
+                                  style={{
+                                    backgroundColor: RISK_COLORS[signal.severity],
+                                    borderColor: RISK_COLORS[signal.severity],
+                                  }}
+                                />
                               </div>
-                            </motion.div>
+                              </div>
+                              
+                              {/* Content */}
+                              <div className="flex-1 pb-4">
+                                <div className="flex items-baseline gap-2 mb-1">
+                                  <span className="text-xs text-white/70">{signal.source}</span>
+                                  <span className="text-[10px] text-white/30">
+                                    {new Date(signal.timestamp).toLocaleDateString()}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-white/60 leading-relaxed">{signal.description}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Pipeline Progress */}
+                <AnimatePresence>
+                  {isPipelineRunning && (
+                    <motion.div
+                      className="mt-6 p-4 bg-blue-500/10 rounded-xl border border-blue-500/20"
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-sm font-medium text-blue-400">Running AI Pipeline</span>
+                        <span className="text-sm text-blue-400">{Math.round(((pipelineStep + 1) / PIPELINE_STEPS.length) * 100)}%</span>
+                      </div>
+                      <div className="h-1 bg-white/[0.1] rounded-full overflow-hidden mb-3">
+                        <motion.div
+                          className="h-full bg-blue-500 rounded-full"
+                          initial={{ width: 0 }}
+                          animate={{ width: `${((pipelineStep + 1) / PIPELINE_STEPS.length) * 100}%` }}
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        {PIPELINE_STEPS.map((step, index) => {
+                          const Icon = step.icon;
+                          const isActive = index === pipelineStep;
+                          const isComplete = index < pipelineStep;
+                          return (
+                            <div
+                              key={step.label}
+                              className={`flex-1 flex flex-col items-center gap-1 p-2 rounded-lg ${
+                                isActive ? "bg-blue-500/20" : isComplete ? "bg-emerald-500/10" : "bg-white/[0.03]"
+                              }`}
+                            >
+                              <Icon size={14} className={isActive ? "text-blue-400" : isComplete ? "text-emerald-400" : "text-white/30"} />
+                              <span className={`text-[10px] ${isActive ? "text-blue-300" : isComplete ? "text-emerald-300" : "text-white/30"}`}>
+                                {step.label}
+                              </span>
+                            </div>
                           );
                         })}
                       </div>
                     </motion.div>
-                  </div>
-                </div>
+                  )}
+                </AnimatePresence>
+              </div>
 
-                <motion.div className="px-8 py-4 border-t border-white/[0.06] bg-[#0f0f10] shrink-0" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4, duration: 0.4 }}>
-                  <div className="flex items-center gap-2.5">
-                    <button onClick={() => onAcceptRisk(building.id)} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-500 text-white text-[13px] font-semibold rounded-xl hover:bg-emerald-400 transition-colors">
-                      <Check size={15} /> Accept Risk
-                    </button>
-                    <div className="relative">
-                      <button onClick={() => setShowReferMenu(!showReferMenu)} className="flex items-center gap-2 px-4 py-2.5 text-white/70 text-[13px] font-medium border border-white/[0.1] rounded-xl hover:bg-white/[0.04] transition-colors">
-                        <Users size={14} /> Refer <ChevronDown size={12} className={`transition-transform ${showReferMenu ? "rotate-180" : ""}`} />
-                      </button>
-                      {showReferMenu && (
-                        <motion.div className="absolute bottom-full left-0 mb-2 w-[220px] bg-[#1a1a1b] border border-white/[0.1] rounded-xl shadow-2xl overflow-hidden z-10" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-                          <button onClick={() => { onRefer(building.id, "senior"); setShowReferMenu(false); }} className="w-full flex items-center gap-3 px-4 py-3 text-[13px] text-white/70 hover:bg-white/[0.06] transition-colors text-left">
-                            <UserCheck size={14} className="text-amber-400 shrink-0" />
-                            <div><div className="font-medium text-white/90">Senior Underwriter</div><div className="text-[11px] text-white/40">Exceeds authority limit</div></div>
-                          </button>
-                          <button onClick={() => { onRefer(building.id, "technical"); setShowReferMenu(false); }} className="w-full flex items-center gap-3 px-4 py-3 text-[13px] text-white/70 hover:bg-white/[0.06] transition-colors text-left border-t border-white/[0.06]">
-                            <Shield size={14} className="text-blue-400 shrink-0" />
-                            <div><div className="font-medium text-white/90">Technical Specialist</div><div className="text-[11px] text-white/40">Listed building, flood, etc.</div></div>
-                          </button>
-                          <button onClick={() => { onRefer(building.id, "claims"); setShowReferMenu(false); }} className="w-full flex items-center gap-3 px-4 py-3 text-[13px] text-white/70 hover:bg-white/[0.06] transition-colors text-left border-t border-white/[0.06]">
-                            <Scale size={14} className="text-red-400 shrink-0" />
-                            <div><div className="font-medium text-white/90">Claims Team</div><div className="text-[11px] text-white/40">Potential existing claim</div></div>
-                          </button>
-                        </motion.div>
-                      )}
-                    </div>
-                    <button onClick={() => {}} className="flex items-center gap-2 px-4 py-2.5 text-white/70 text-[13px] font-medium border border-white/[0.1] rounded-xl hover:bg-white/[0.04] transition-colors">
-                      <ClipboardList size={14} /> Request Survey
-                    </button>
-                    <div className="flex-1" />
-                    <button onClick={() => onFlagForRenewal(building.id)} className="flex items-center gap-2 px-3 py-2.5 text-amber-400/70 text-[12px] font-medium rounded-lg hover:bg-amber-500/[0.06] transition-colors">
-                      <Flag size={13} /> Flag for Renewal
-                    </button>
-                    <button onClick={() => onDecline(building.id)} className="flex items-center gap-2 px-4 py-2.5 text-white/40 text-[12px] font-medium rounded-lg hover:bg-red-500/[0.06] hover:text-red-400 transition-colors">
-                      <X size={14} /> Decline
-                    </button>
-                  </div>
-                </motion.div>
+              {/* Footer - Actions */}
+              <div className="px-6 py-4 border-t border-white/[0.06] flex items-center gap-3">
+                <button
+                  onClick={() => onAcceptRisk(localBuilding.id)}
+                  className="px-4 py-2 bg-white text-black text-sm font-medium rounded-lg hover:bg-white/90 transition-colors"
+                >
+                  Accept Risk
+                </button>
+                
+                <button
+                  onClick={handleRerunPipeline}
+                  disabled={isPipelineRunning}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg border transition-colors ${
+                    isPipelineRunning
+                      ? "border-blue-500/50 text-blue-400 cursor-wait"
+                      : "border-white/20 text-white/70 hover:bg-white/[0.06]"
+                  }`}
+                >
+                  {isPipelineRunning ? "Running..." : "Rerun Pipeline"}
+                </button>
+
+                <div className="flex-1" />
+
+                <button
+                  onClick={() => onRefer(localBuilding.id, "senior")}
+                  className="px-3 py-2 text-sm text-white/50 hover:text-white/70 transition-colors"
+                >
+                  Refer
+                </button>
+
+                <button
+                  onClick={() => onDecline(localBuilding.id)}
+                  className="px-3 py-2 text-sm text-white/40 hover:text-red-400 transition-colors"
+                >
+                  Decline
+                </button>
               </div>
             </motion.div>
           </div>

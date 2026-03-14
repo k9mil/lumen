@@ -121,16 +121,6 @@ export default function App() {
     setSelectedId(null);
   }, []);
 
-  const handleFlagForRenewal = useCallback((id: string) => {
-    // In production: mark for terms change at next renewal
-    setBuildings((prev) =>
-      prev.map((b) =>
-        b.id === id ? { ...b, status: "monitoring" as const } : b
-      )
-    );
-    setSelectedId(null);
-  }, []);
-
   const handleFullscreenChange = useCallback((isFullscreen: boolean) => {
     setIsMapFullscreen(isFullscreen);
   }, []);
@@ -209,7 +199,11 @@ export default function App() {
         onAcceptRisk={handleAcceptRisk}
         onDecline={handleDecline}
         onRefer={handleRefer}
-        onFlagForRenewal={handleFlagForRenewal}
+        onBuildingUpdate={(updated) => {
+          setBuildings((prev) =>
+            prev.map((b) => (b.id === updated.id ? updated : b))
+          );
+        }}
       />
 
       {/* Onboarding Modal */}
