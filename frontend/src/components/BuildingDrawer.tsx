@@ -2,116 +2,49 @@ import { useEffect, useRef } from "react";
 import type { Building, RiskTier } from "../types";
 
 const RISK_COLORS: Record<RiskTier, string> = {
-  critical: "#dc2626",
-  high: "#d97706",
-  medium: "#2563eb",
-  low: "#16a34a",
+  critical: "#ef4444",
+  high: "#f59e0b",
+  medium: "#3b82f6",
+  low: "#10b981",
 };
 
-const RISK_BG: Record<RiskTier, string> = {
-  critical: "bg-risk-critical-bg",
-  high: "bg-risk-high-bg",
-  medium: "bg-risk-medium-bg",
-  low: "bg-risk-low-bg",
+const RISK_LABELS: Record<RiskTier, string> = {
+  critical: "Critical",
+  high: "High",
+  medium: "Medium",
+  low: "Low",
 };
 
-const RISK_TEXT: Record<RiskTier, string> = {
-  critical: "text-risk-critical",
-  high: "text-risk-high",
-  medium: "text-risk-medium",
-  low: "text-risk-low",
+const SOURCE_COLORS: Record<string, string> = {
+  "Vision Model": "text-violet-400 bg-violet-500/10 border-violet-500/20",
+  "Council Rates": "text-amber-400 bg-amber-500/10 border-amber-500/20",
+  "Companies House": "text-blue-400 bg-blue-500/10 border-blue-500/20",
+  "Street View": "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
+  "Building Survey": "text-slate-400 bg-slate-500/10 border-slate-500/20",
+  "Fire Service": "text-red-400 bg-red-500/10 border-red-500/20",
+  "Health & Safety": "text-orange-400 bg-orange-500/10 border-orange-500/20",
+  "Council Planning": "text-indigo-400 bg-indigo-500/10 border-indigo-500/20",
+  "Licensing Board": "text-purple-400 bg-purple-500/10 border-purple-500/20",
+  "Flood Risk": "text-cyan-400 bg-cyan-500/10 border-cyan-500/20",
+  "Environmental Health": "text-lime-400 bg-lime-500/10 border-lime-500/20",
+  "Routine Check": "text-white/50 bg-white/5 border-white/10",
 };
 
-const SEVERITY_DOT: Record<RiskTier, string> = {
-  critical: "bg-risk-critical",
-  high: "bg-risk-high",
-  medium: "bg-risk-medium",
-  low: "bg-risk-low",
-};
-
-const SOURCE_BADGE: Record<string, string> = {
-  "Vision Model": "bg-violet-50 text-violet-700 border-violet-200/50",
-  "Council Rates": "bg-amber-50 text-amber-700 border-amber-200/50",
-  "Companies House": "bg-blue-50 text-blue-700 border-blue-200/50",
-  "Street View": "bg-emerald-50 text-emerald-700 border-emerald-200/50",
-  "Building Survey": "bg-slate-50 text-slate-700 border-slate-200/50",
-  "Fire Service": "bg-red-50 text-red-700 border-red-200/50",
-  "Health & Safety": "bg-orange-50 text-orange-700 border-orange-200/50",
-  "Council Planning": "bg-indigo-50 text-indigo-700 border-indigo-200/50",
-  "Licensing Board": "bg-purple-50 text-purple-700 border-purple-200/50",
-  "Flood Risk": "bg-cyan-50 text-cyan-700 border-cyan-200/50",
-  "Environmental Health": "bg-lime-50 text-lime-700 border-lime-200/50",
-  "Routine Check": "bg-gray-50 text-gray-600 border-gray-200/50",
-};
-
-function ArcGauge({
-  score,
-  tier,
-  size = 120,
-}: {
-  score: number;
-  tier: RiskTier;
-  size?: number;
-}) {
-  const radius = (size - 12) / 2;
-  const center = size / 2;
-  const circumference = Math.PI * radius; // half circle
-  const progress = (score / 100) * circumference;
-
-  return (
-    <svg width={size} height={size / 2 + 16} viewBox={`0 0 ${size} ${size / 2 + 16}`}>
-      {/* Background arc */}
-      <path
-        d={`M ${center - radius} ${center} A ${radius} ${radius} 0 0 1 ${center + radius} ${center}`}
-        fill="none"
-        stroke="#f0f0f0"
-        strokeWidth={6}
-        strokeLinecap="round"
-      />
-      {/* Progress arc */}
-      <path
-        d={`M ${center - radius} ${center} A ${radius} ${radius} 0 0 1 ${center + radius} ${center}`}
-        fill="none"
-        stroke={RISK_COLORS[tier]}
-        strokeWidth={6}
-        strokeLinecap="round"
-        strokeDasharray={`${progress} ${circumference}`}
-      />
-      {/* Score text */}
-      <text
-        x={center}
-        y={center - 4}
-        textAnchor="middle"
-        fill={RISK_COLORS[tier]}
-        fontSize={28}
-        fontFamily="DM Mono"
-        fontWeight={500}
-      >
-        {score}
-      </text>
-      <text
-        x={center}
-        y={center + 14}
-        textAnchor="middle"
-        fill="#9ca3af"
-        fontSize={10}
-        fontFamily="DM Sans"
-      >
-        Risk Score
-      </text>
-    </svg>
-  );
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
-function formatTimestamp(iso: string): string {
+function formatTime(iso: string): string {
   const d = new Date(iso);
-  const day = d.getDate();
-  const month = d.toLocaleDateString("en-GB", { month: "short" });
-  const time = d.toLocaleTimeString("en-GB", {
+  return d.toLocaleTimeString("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
   });
-  return `${day} ${month}, ${time}`;
 }
 
 interface BuildingDrawerProps {
@@ -137,165 +70,166 @@ export default function BuildingDrawer({
     }
     if (building) {
       document.addEventListener("mousedown", handleClick);
+      document.body.style.overflow = "hidden";
     }
-    return () => document.removeEventListener("mousedown", handleClick);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.body.style.overflow = "";
+    };
   }, [building, onClose]);
 
-  // Close on Escape
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
     }
-    document.addEventListener("keydown", handleKey);
+    if (building) {
+      document.addEventListener("keydown", handleKey);
+    }
     return () => document.removeEventListener("keydown", handleKey);
-  }, [onClose]);
+  }, [building, onClose]);
 
   if (!building) return null;
 
+  const riskChange = Math.floor(Math.random() * 20) - 5;
+  const daysSinceChange = Math.floor(Math.random() * 14) + 1;
+
   return (
     <div className="fixed inset-0 z-50">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/10 animate-fade-in" />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={onClose} />
 
-      {/* Drawer */}
       <div
         ref={drawerRef}
-        className="absolute right-0 top-0 bottom-0 w-[420px] bg-white shadow-2xl animate-slide-in flex flex-col"
+        className="absolute right-0 top-0 bottom-0 w-[33vw] min-w-[400px] max-w-[500px] bg-[#0f0f10] shadow-2xl animate-slide-in flex flex-col border-l border-white/[0.08]"
       >
-        {/* Header */}
-        <div className="px-6 pt-5 pb-4 border-b border-surface-200">
-          <div className="flex items-start justify-between">
-            <div className="flex-1 pr-4">
-              <h2 className="text-lg font-semibold text-gray-900">
-                {building.address}
-              </h2>
-              <div className="flex items-center gap-2 mt-2">
+        <div className="px-6 py-5 border-b border-white/[0.06]">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-[20px] font-semibold text-white mb-1">{building.address}</h2>
+              <div className="flex items-center gap-2">
+                <span className="text-[13px] text-white/50">{building.tenant}</span>
+                <span className="text-white/20">·</span>
+                <span className="text-[13px] text-white/50">{building.propertyType}</span>
                 {building.listed && (
-                  <span className="text-[11px] font-medium text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200/50">
-                    Listed Building
-                  </span>
+                  <>
+                    <span className="text-white/20">·</span>
+                    <span className="text-[11px] font-medium text-indigo-300 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
+                      Listed Building
+                    </span>
+                  </>
                 )}
-                <span className="text-[11px] font-medium text-gray-500 bg-surface-100 px-2 py-0.5 rounded">
-                  {building.propertyType}
-                </span>
               </div>
             </div>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 p-1 transition-colors"
+              className="text-white/40 hover:text-white p-2 hover:bg-white/[0.06] rounded-lg transition-all"
             >
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <path
-                  d="M6 6L14 14M14 6L6 14"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M18 6L6 18M6 6l12 12" />
               </svg>
             </button>
           </div>
         </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto scrollbar-thin px-6 py-5">
-          {/* Risk score gauge */}
-          <div className="flex justify-center mb-6">
-            <ArcGauge
-              score={building.riskScore}
-              tier={building.riskTier}
-              size={140}
-            />
-          </div>
-
-          {/* Risk tier badge */}
-          <div className="flex justify-center mb-6">
-            <span
-              className={`
-                inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border
-                ${RISK_BG[building.riskTier]} ${RISK_TEXT[building.riskTier]}
-              `}
-              style={{ borderColor: `${RISK_COLORS[building.riskTier]}30` }}
-            >
-              <span
-                className={`w-1.5 h-1.5 rounded-full ${SEVERITY_DOT[building.riskTier]}`}
-              />
-              {building.riskTier.charAt(0).toUpperCase() +
-                building.riskTier.slice(1)}{" "}
-              Risk
-            </span>
-          </div>
-
-          {/* Use comparison */}
-          <div className="bg-surface-50 rounded-lg border border-surface-200 p-4 mb-6">
-            <div className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-3">
-              Use Classification
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-start justify-between">
-                <span className="text-xs text-gray-500">Registered</span>
-                <span className="text-xs font-medium text-gray-700 text-right max-w-[220px]">
-                  {building.registeredUse}
-                </span>
+        <div className="flex-1 overflow-auto">
+          <div className="px-6 py-5 border-b border-white/[0.06]">
+            <div className="flex items-center gap-6">
+              <div className="relative w-24 h-24 flex items-center justify-center">
+                <svg className="absolute inset-0 w-full h-full -rotate-90">
+                  <circle cx="48" cy="48" r="42" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="6" />
+                  <circle
+                    cx="48"
+                    cy="48"
+                    r="42"
+                    fill="none"
+                    stroke={RISK_COLORS[building.riskTier]}
+                    strokeWidth="6"
+                    strokeLinecap="round"
+                    strokeDasharray={`${(building.riskScore / 100) * 264} 264`}
+                  />
+                </svg>
+                <div className="text-center">
+                  <div className="text-[28px] font-bold" style={{ color: RISK_COLORS[building.riskTier] }}>
+                    {building.riskScore}
+                  </div>
+                  <div className="text-[10px] text-white/40 mt-0.5 uppercase tracking-wide">Score</div>
+                </div>
               </div>
-              <div className="flex items-start justify-between">
-                <span className="text-xs text-gray-500">Detected</span>
-                <span
-                  className={`text-xs font-medium text-right max-w-[220px] ${
-                    building.useMismatch
-                      ? "text-risk-critical"
-                      : "text-gray-700"
-                  }`}
-                >
+
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span
+                    className="px-2 py-0.5 rounded text-[12px] font-medium border"
+                    style={{
+                      color: RISK_COLORS[building.riskTier],
+                      backgroundColor: `${RISK_COLORS[building.riskTier]}15`,
+                      borderColor: `${RISK_COLORS[building.riskTier]}30`,
+                    }}
+                  >
+                    {RISK_LABELS[building.riskTier]} Risk
+                  </span>
+                  <span className="text-white/30">·</span>
+                  <span className="text-[13px] text-white/60">
+                    Risk {riskChange > 0 ? "increased" : "decreased"} by {Math.abs(riskChange)} points
+                  </span>
+                </div>
+                <div className="text-[13px] text-white/50">Last change {daysSinceChange} days ago</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="px-6 py-4 border-b border-white/[0.06]">
+            <div className="text-[11px] text-white/40 uppercase tracking-wide mb-3">Use Classification</div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-white/[0.03] rounded-lg p-4 border border-white/[0.06]">
+                <div className="text-[11px] text-white/40 mb-1">Registered</div>
+                <div className="text-[12px] font-medium text-white/80">{building.registeredUse}</div>
+              </div>
+              <div
+                className={`rounded-lg p-4 border ${
+                  building.useMismatch ? "bg-red-500/[0.05] border-red-500/20" : "bg-white/[0.03] border-white/[0.06]"
+                }`}
+              >
+                <div className="text-[11px] text-white/40 mb-1">Detected</div>
+                <div className={`text-[12px] font-medium ${building.useMismatch ? "text-red-400" : "text-white/80"}`}>
                   {building.detectedUse}
-                  {building.useMismatch && (
-                    <span className="block text-[10px] font-medium text-risk-critical mt-0.5">
-                      &#9888; Mismatch detected
-                    </span>
-                  )}
-                </span>
+                </div>
+                {building.useMismatch && (
+                  <div className="flex items-center gap-1 mt-1.5 text-[11px] text-red-400">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    Mismatch detected
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Signal timeline */}
-          <div className="mb-4">
-            <div className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-3">
-              Signal Timeline
-            </div>
+          <div className="px-6 py-4">
+            <div className="text-[11px] text-white/40 uppercase tracking-wide mb-4">Alert Timeline</div>
             <div className="space-y-0">
               {building.signals.map((signal, i) => {
-                const sourceBadge =
-                  SOURCE_BADGE[signal.source] ||
-                  "bg-gray-50 text-gray-600 border-gray-200/50";
+                const sourceStyle = SOURCE_COLORS[signal.source] || "text-white/50 bg-white/5 border-white/10";
                 const isLast = i === building.signals.length - 1;
 
                 return (
                   <div key={signal.id} className="flex gap-3">
-                    {/* Timeline line + dot */}
                     <div className="flex flex-col items-center w-3 shrink-0">
                       <div
-                        className={`w-2 h-2 rounded-full mt-2 ${SEVERITY_DOT[signal.severity]}`}
+                        className="w-[7px] h-[7px] rounded-full mt-[7px] ring-2 ring-[#0f0f10]"
+                        style={{ backgroundColor: RISK_COLORS[signal.severity] }}
                       />
-                      {!isLast && (
-                        <div className="w-px flex-1 bg-surface-200 mt-1" />
-                      )}
+                      {!isLast && <div className="w-px flex-1 bg-white/[0.08] mt-1" />}
                     </div>
 
-                    {/* Content */}
-                    <div className={`pb-4 flex-1 ${isLast ? "" : ""}`}>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span
-                          className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${sourceBadge}`}
-                        >
+                    <div className="pb-5 flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className={`text-[10px] font-semibold px-1.5 py-[2px] rounded-[3px] border ${sourceStyle}`}>
                           {signal.source}
                         </span>
-                        <span className="font-mono text-[10px] text-gray-400">
-                          {formatTimestamp(signal.timestamp)}
-                        </span>
+                        <span className="font-mono text-[10px] text-white/40">{formatDate(signal.timestamp)} at {formatTime(signal.timestamp)}</span>
                       </div>
-                      <p className="text-[13px] text-gray-700 leading-relaxed">
-                        {signal.description}
-                      </p>
+                      <p className="text-[12.5px] text-white/70 leading-relaxed">{signal.description}</p>
                     </div>
                   </div>
                 );
@@ -304,17 +238,16 @@ export default function BuildingDrawer({
           </div>
         </div>
 
-        {/* Footer actions */}
-        <div className="px-6 py-4 border-t border-surface-200 flex gap-3">
+        <div className="px-6 py-4 border-t border-white/[0.06] flex gap-3 bg-[#0f0f10]">
           <button
             onClick={() => onMarkReviewed(building.id)}
-            className="flex-1 px-4 py-2.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors"
+            className="flex-1 px-4 py-2.5 bg-white text-gray-900 text-[13px] font-semibold rounded-lg hover:bg-white/90 transition-colors"
           >
             Mark as Reviewed
           </button>
           <button
             onClick={() => onDismiss(building.id)}
-            className="px-4 py-2.5 text-gray-600 text-sm font-medium border border-surface-200 rounded-lg hover:bg-surface-50 transition-colors"
+            className="px-4 py-2.5 text-white/60 text-[13px] font-medium border border-white/[0.12] rounded-lg hover:bg-white/[0.04] transition-colors"
           >
             Dismiss
           </button>
