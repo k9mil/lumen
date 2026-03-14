@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useCallback } from "react";
-import { X, Eye, Shield, Zap, Globe, Search, Building as BuildingIcon } from "lucide-react";
+import { X, Eye, Target, Binary, Brain, Sparkles, GitBranch } from "lucide-react";
 import type { Building, RiskTier } from "../types";
 import { refreshBuilding, fetchDashboardBuildings } from "../api/client";
 
@@ -18,14 +18,64 @@ const RISK_LABELS: Record<RiskTier, string> = {
   low: "Low",
 };
 
-const PIPELINE_STEPS = [
-  { icon: Globe, label: "Geocode", duration: 2000 },
-  { icon: BuildingIcon, label: "Companies", duration: 3000 },
-  { icon: Search, label: "Places", duration: 2500 },
-  { icon: Eye, label: "Street View", duration: 4000 },
-  { icon: Zap, label: "Vision AI", duration: 8000 },
-  { icon: Shield, label: "Score", duration: 2000 },
-];
+interface PipelineStage {
+  id: string;
+  label: string;
+  description: string;
+  icon: React.ElementType;
+  duration: number;
+  color: string;
+  branches?: Array<{ label: string; subLabel: string }>;
+  final?: boolean;
+}
+
+// New tree-structured pipeline stages
+const PIPELINE_TREE: Record<string, PipelineStage> = {
+  discovery: {
+    id: "discovery",
+    label: "Location Discovery",
+    description: "Mapping coordinates & spatial context",
+    icon: Target,
+    duration: 2000,
+    color: "#6366f1",
+  },
+  dataCollection: {
+    id: "dataCollection",
+    label: "Intelligence Gathering",
+    description: "Corporate records, licensing, business profiles",
+    icon: Binary,
+    duration: 4000,
+    color: "#8b5cf6",
+    branches: [
+      { label: "Corporate", subLabel: "Registry lookup" },
+      { label: "Licensing", subLabel: "Permits & authorizations" },
+      { label: "Profile", subLabel: "Public data" },
+    ],
+  },
+  visualAnalysis: {
+    id: "visualAnalysis",
+    label: "Visual Intelligence",
+    description: "Street-level imagery & pattern recognition",
+    icon: Eye,
+    duration: 6000,
+    color: "#ec4899",
+    branches: [
+      { label: "Capture", subLabel: "360° imagery" },
+      { label: "Analysis", subLabel: "Neural classification" },
+    ],
+  },
+  synthesis: {
+    id: "synthesis",
+    label: "Risk Synthesis",
+    description: "Weighted scoring & threat assessment",
+    icon: Brain,
+    duration: 3000,
+    color: "#10b981",
+    final: true,
+  },
+};
+
+const STAGE_ORDER: Array<keyof typeof PIPELINE_TREE> = ["discovery", "dataCollection", "visualAnalysis", "synthesis"];
 
 interface BuildingModalProps {
   building: Building | null;
@@ -63,9 +113,11 @@ export default function BuildingModal({
     try {
       await refreshBuilding(localBuilding.id);
       
-      for (let i = 0; i < PIPELINE_STEPS.length; i++) {
+      // Animate through tree stages
+      for (let i = 0; i < STAGE_ORDER.length; i++) {
         setPipelineStep(i);
-        await new Promise(resolve => setTimeout(resolve, PIPELINE_STEPS[i].duration));
+        const stage = PIPELINE_TREE[STAGE_ORDER[i]];
+        await new Promise(resolve => setTimeout(resolve, stage.duration));
       }
       
       await new Promise(resolve => setTimeout(resolve, 1000));
@@ -230,41 +282,183 @@ export default function BuildingModal({
                 <AnimatePresence>
                   {isPipelineRunning && (
                     <motion.div
-                      className="mt-6 p-4 bg-blue-500/10 rounded-xl border border-blue-500/20"
+                      className="mt-6 p-5 bg-[#0c0c0d] rounded-xl border border-white/[0.06] overflow-hidden"
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: "auto" }}
                       exit={{ opacity: 0, height: 0 }}
                     >
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-sm font-medium text-blue-400">Running AI Pipeline</span>
-                        <span className="text-sm text-blue-400">{Math.round(((pipelineStep + 1) / PIPELINE_STEPS.length) * 100)}%</span>
+                      {/* Header */}
+                      <div className="flex items-center justify-between mb-5">
+                        <div className="flex items-center gap-2">
+                          <Sparkles size={14} className="text-white/40" />
+                          <span className="text-sm font-medium text-white/70">Intelligence Pipeline Active</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          <span className="text-xs text-white/40 font-mono">
+                            {Math.round(((pipelineStep + 1) / STAGE_ORDER.length) * 100)}%
+                          </span>
+                        </div>
                       </div>
-                      <div className="h-1 bg-white/[0.1] rounded-full overflow-hidden mb-3">
-                        <motion.div
-                          className="h-full bg-blue-500 rounded-full"
-                          initial={{ width: 0 }}
-                          animate={{ width: `${((pipelineStep + 1) / PIPELINE_STEPS.length) * 100}%` }}
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        {PIPELINE_STEPS.map((step, index) => {
-                          const Icon = step.icon;
-                          const isActive = index === pipelineStep;
-                          const isComplete = index < pipelineStep;
-                          return (
-                            <div
-                              key={step.label}
-                              className={`flex-1 flex flex-col items-center gap-1 p-2 rounded-lg ${
-                                isActive ? "bg-blue-500/20" : isComplete ? "bg-emerald-500/10" : "bg-white/[0.03]"
-                              }`}
-                            >
-                              <Icon size={14} className={isActive ? "text-blue-400" : isComplete ? "text-emerald-400" : "text-white/30"} />
-                              <span className={`text-[10px] ${isActive ? "text-blue-300" : isComplete ? "text-emerald-300" : "text-white/30"}`}>
-                                {step.label}
-                              </span>
-                            </div>
-                          );
-                        })}
+
+                      {/* Tree Visualization */}
+                      <div className="relative">
+                        {/* Connection Lines */}
+                        <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 0 }}>
+                          {/* Vertical backbone */}
+                          <motion.line
+                            x1="20"
+                            y1="28"
+                            x2="20"
+                            y2={28 + (STAGE_ORDER.length - 1) * 80}
+                            stroke="rgba(255,255,255,0.06)"
+                            strokeWidth="2"
+                          />
+                          {/* Active progress line */}
+                          <motion.line
+                            x1="20"
+                            y1="28"
+                            x2="20"
+                            y2={28 + pipelineStep * 80 + (pipelineStep === STAGE_ORDER.length - 1 ? 0 : 40)}
+                            stroke="url(#gradient)"
+                            strokeWidth="2"
+                            initial={{ pathLength: 0 }}
+                            animate={{ pathLength: (pipelineStep + 1) / STAGE_ORDER.length }}
+                            transition={{ duration: 0.5 }}
+                          />
+                          <defs>
+                            <linearGradient id="gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                              <stop offset="0%" stopColor="#6366f1" />
+                              <stop offset="50%" stopColor="#8b5cf6" />
+                              <stop offset="100%" stopColor="#10b981" />
+                            </linearGradient>
+                          </defs>
+                        </svg>
+
+                        {/* Stages */}
+                        <div className="relative z-10 space-y-2">
+                          {STAGE_ORDER.map((stageId, index) => {
+                            const stage = PIPELINE_TREE[stageId];
+                            const Icon = stage.icon;
+                            const isActive = index === pipelineStep;
+                            const isComplete = index < pipelineStep;
+
+                            return (
+                              <motion.div
+                                key={stageId}
+                                className="flex items-start gap-4"
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: index * 0.1 }}
+                              >
+                                {/* Node */}
+                                <div className="relative flex flex-col items-center shrink-0 w-10">
+                                  <motion.div
+                                    className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-500 ${
+                                      isActive
+                                        ? "border-white/30 bg-[#111]"
+                                        : isComplete
+                                        ? "border-white/10 bg-white/[0.05]"
+                                        : "border-white/[0.04] bg-transparent"
+                                    }`}
+                                    animate={
+                                      isActive
+                                        ? { scale: [1, 1.1, 1], boxShadow: ["0 0 0 0 rgba(255,255,255,0)", "0 0 20px 4px rgba(255,255,255,0.1)", "0 0 0 0 rgba(255,255,255,0)"] }
+                                        : {}
+                                    }
+                                    transition={isActive ? { duration: 2, repeat: Infinity } : {}}
+                                  >
+                                    <Icon
+                                      size={16}
+                                      style={{ color: isActive ? stage.color : isComplete ? "#10b981" : "rgba(255,255,255,0.2)" }}
+                                    />
+                                  </motion.div>
+                                </div>
+
+                                {/* Content */}
+                                <div className="flex-1 pt-1.5 pb-4">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span
+                                      className={`text-sm font-medium transition-colors ${
+                                        isActive ? "text-white" : isComplete ? "text-white/60" : "text-white/30"
+                                      }`}
+                                    >
+                                      {stage.label}
+                                    </span>
+                                    {isActive && (
+                                      <motion.span
+                                        className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-white/50"
+                                        animate={{ opacity: [0.5, 1, 0.5] }}
+                                        transition={{ duration: 1.5, repeat: Infinity }}
+                                      >
+                                        Analyzing...
+                                      </motion.span>
+                                    )}
+                                    {isComplete && (
+                                      <span className="text-[10px] text-emerald-400">Complete</span>
+                                    )}
+                                  </div>
+                                  <p className={`text-xs transition-colors ${isActive ? "text-white/50" : "text-white/30"}`}>
+                                    {stage.description}
+                                  </p>
+
+                                  {/* Branching sub-steps */}
+                                  {stage.branches && (isActive || isComplete) && (
+                                    <motion.div
+                                      className="flex flex-wrap gap-2 mt-3"
+                                      initial={{ opacity: 0, height: 0 }}
+                                      animate={{ opacity: 1, height: "auto" }}
+                                      transition={{ delay: 0.2 }}
+                                    >
+                                      {stage.branches.map((branch, bIndex) => (
+                                        <motion.div
+                                          key={branch.label}
+                                          className={`flex items-center gap-1.5 px-2 py-1 rounded-md border ${
+                                            isComplete
+                                              ? "border-emerald-500/20 bg-emerald-500/5"
+                                              : isActive
+                                              ? "border-white/10 bg-white/[0.03]"
+                                              : "border-white/[0.04]"
+                                          }`}
+                                          initial={{ opacity: 0, scale: 0.9 }}
+                                          animate={{ opacity: 1, scale: 1 }}
+                                          transition={{ delay: bIndex * 0.1 }}
+                                        >
+                                          <GitBranch size={10} className={isComplete ? "text-emerald-400" : "text-white/30"} />
+                                          <span className={`text-[10px] ${isComplete ? "text-emerald-300" : "text-white/40"}`}>
+                                            {branch.label}
+                                          </span>
+                                        </motion.div>
+                                      ))}
+                                    </motion.div>
+                                  )}
+
+                                  {/* Final output indicator */}
+                                  {stage.final && isActive && (
+                                    <motion.div
+                                      className="mt-3 flex items-center gap-2"
+                                      initial={{ opacity: 0 }}
+                                      animate={{ opacity: 1 }}
+                                      transition={{ delay: 0.3 }}
+                                    >
+                                      <div className="flex gap-0.5">
+                                        {[0, 1, 2].map((i) => (
+                                          <motion.div
+                                            key={i}
+                                            className="w-1 h-3 rounded-full bg-emerald-500"
+                                            animate={{ height: [12, 20, 12] }}
+                                            transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.1 }}
+                                          />
+                                        ))}
+                                      </div>
+                                      <span className="text-xs text-emerald-400">Synthesizing risk profile...</span>
+                                    </motion.div>
+                                  )}
+                                </div>
+                              </motion.div>
+                            );
+                          })}
+                        </div>
                       </div>
                     </motion.div>
                   )}

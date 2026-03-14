@@ -113,12 +113,14 @@ export default function MapPanel({
     map.on("load", () => {
       // Enable 3D terrain
       try {
+        // @ts-ignore - Mapbox types issue
         map.addSource("mapbox-dem", {
           type: "raster-dem",
           url: "mapbox://mapbox.mapbox-terrain-dem-v1",
           tileSize: 512,
           maxzoom: 14,
         });
+        // @ts-ignore - Mapbox types issue
         map.setTerrain({ source: "mapbox-dem", exaggeration: 1.2 });
       } catch (_e) {
         // terrain may not be supported
