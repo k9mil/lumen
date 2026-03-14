@@ -29,4 +29,4 @@ export interface Building {
   signals: Signal[];
 }
 
-export type TabId = "all" | "needs_review" | "cleared" | "assigned";
+export type TabId = "all" | "needs_review";
