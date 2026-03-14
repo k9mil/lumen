@@ -9,40 +9,60 @@
     box-sizing: border-box;
   }
 
-  body {
+  html, body, #root {
+    height: 100%;
     margin: 0;
+  }
+
+  body {
     font-family: "DM Sans", system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background: #1a1a2e;
+    background: #0a0a0b;
+    overflow: hidden;
+    color: rgba(255, 255, 255, 0.9);
   }
 
   /* Mapbox overrides */
-  .mapboxgl-ctrl-attrib {
+  .mapboxgl-ctrl-attrib,
+  .mapboxgl-ctrl-logo {
     display: none !important;
   }
 
   .mapboxgl-popup-content {
     font-family: "DM Sans", system-ui, sans-serif;
-    padding: 8px 12px;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    padding: 10px 14px;
+    border-radius: 10px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
     font-size: 13px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: #1a1a1b;
+    color: rgba(255, 255, 255, 0.9);
   }
 
   .mapboxgl-popup-tip {
-    border-top-color: white;
+    border-top-color: #1a1a1b;
+  }
+
+  .mapboxgl-popup-close-button {
+    display: none;
+  }
+
+  /* Custom marker styles */
+  .mapboxgl-marker {
+    position: absolute !important;
+    will-change: transform;
   }
 }
 
 @layer utilities {
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: #e0e0e0 transparent;
+    scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
   }
 
   .scrollbar-thin::-webkit-scrollbar {
-    width: 6px;
+    width: 5px;
   }
 
   .scrollbar-thin::-webkit-scrollbar-track {
@@ -50,7 +70,71 @@
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: #e0e0e0;
-    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  /* Animation keyframes */
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes fade-up {
+    from { 
+      opacity: 0; 
+      transform: translateY(10px); 
+    }
+    to { 
+      opacity: 1; 
+      transform: translateY(0); 
+    }
+  }
+
+  @keyframes scale-in {
+    from { 
+      opacity: 0; 
+      transform: scale(0.98); 
+    }
+    to { 
+      opacity: 1; 
+      transform: scale(1); 
+    }
+  }
+
+  @keyframes slide-in {
+    from { 
+      opacity: 0; 
+      transform: translateX(100%); 
+    }
+    to { 
+      opacity: 1; 
+      transform: translateX(0); 
+    }
+  }
+
+  @keyframes pulse-ring {
+    0% { transform: scale(1); opacity: 0.6; }
+    100% { transform: scale(2.2); opacity: 0; }
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.2s ease-out;
+  }
+
+  .animate-fade-up {
+    animation: fade-up 0.3s ease-out backwards;
+  }
+
+  .animate-scale-in {
+    animation: scale-in 0.3s ease-out backwards;
+  }
+
+  .animate-slide-in {
+    animation: slide-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards;
   }
 }

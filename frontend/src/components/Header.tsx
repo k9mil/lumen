@@ -3,15 +3,20 @@ interface HeaderProps {
 }
 
 export default function Header({ needsReviewCount }: HeaderProps) {
+  const hour = new Date().getHours();
+  const greeting =
+    hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+
   return (
-    <div className="px-6 pt-6 pb-2">
-      <h1 className="text-[28px] font-semibold text-gray-900 tracking-[-0.02em]">
-        Good morning, Sarah
+    <div className="px-6 pt-6 pb-4">
+      <h1 className="text-[28px] font-semibold text-white tracking-[-0.02em]">
+        {greeting}, Kamil
       </h1>
-      <p className="text-[15px] text-gray-500 mt-1">
-        {needsReviewCount} building{needsReviewCount !== 1 ? "s" : ""} need
-        {needsReviewCount === 1 ? "s" : ""} your attention today.
-      </p>
+      {needsReviewCount > 0 && (
+        <p className="text-[14px] text-white/50 mt-1">
+          {needsReviewCount} properties need attention today
+        </p>
+      )}
     </div>
   );
 }
