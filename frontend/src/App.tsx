@@ -9,7 +9,7 @@ import MapPanel from "./components/MapPanel";
 import PipelineTabs from "./components/PipelineTabs";
 import SearchFilterBar from "./components/SearchFilterBar";
 import BuildingsTable from "./components/BuildingsTable";
-import BuildingDrawer from "./components/BuildingDrawer";
+import BuildingModal from "./components/BuildingModal";
 
 export default function App() {
   const [buildings, setBuildings] = useState<Building[]>(initialBuildings);
@@ -21,6 +21,7 @@ export default function App() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [flyToId, setFlyToId] = useState<string | null>(null);
+  const [isMapFullscreen, setIsMapFullscreen] = useState(false);
 
   const tabCounts = useMemo(
     () => ({
@@ -82,7 +83,7 @@ export default function App() {
     setFlyToId(id);
   }, []);
 
-  const handleCloseDrawer = useCallback(() => {
+  const handleCloseModal = useCallback(() => {
     setSelectedId(null);
   }, []);
 
@@ -104,17 +105,35 @@ export default function App() {
     setSelectedId(null);
   }, []);
 
+  const handleEscalate = useCallback((id: string) => {
+    setBuildings((prev) =>
+      prev.map((b) =>
+        b.id === id ? { ...b, status: "needs_review" as const, assignedTo: "escalated" } : b
+      )
+    );
+    setSelectedId(null);
+  }, []);
+
+  const handleRequestSiteVisit = useCallback((_id: string) => {
+    // In production this would trigger a site visit request workflow
+    setSelectedId(null);
+  }, []);
+
+  const handleFullscreenChange = useCallback((isFullscreen: boolean) => {
+    setIsMapFullscreen(isFullscreen);
+  }, []);
+
   return (
     <div className="h-screen w-screen bg-[#0a0a0b] overflow-hidden flex">
-      {/* Sidebar */}
+      {/* Sidebar - navigation */}
       <Sidebar />
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col min-h-0">
+      <div className={`flex-1 flex flex-col min-h-0 ${isMapFullscreen ? 'pointer-events-none' : ''}`}>
         {/* TopBar */}
         <TopBar />
 
-        {/* Content area with soft gradient */}
+        {/* Content area */}
         <div className="flex-1 flex flex-col min-h-0 bg-gradient-to-b from-[#0a0a0b] via-[#0c0c0d] to-[#0a0a0b]">
           <Header needsReviewCount={tabCounts.needs_review} />
 
@@ -126,6 +145,7 @@ export default function App() {
               selectedId={selectedId}
               onSelectBuilding={handleSelectBuilding}
               flyToId={flyToId}
+              onFullscreenChange={handleFullscreenChange}
             />
           </div>
 
@@ -159,12 +179,15 @@ export default function App() {
         </div>
       </div>
 
-      {/* Building Sidebar (33% width) */}
-      <BuildingDrawer
+      {/* Building Modal - centered on screen */}
+      <BuildingModal
         building={selectedBuilding}
-        onClose={handleCloseDrawer}
+        isOpen={!!selectedId}
+        onClose={handleCloseModal}
         onMarkReviewed={handleMarkReviewed}
         onDismiss={handleDismiss}
+        onEscalate={handleEscalate}
+        onRequestSiteVisit={handleRequestSiteVisit}
       />
     </div>
   );
