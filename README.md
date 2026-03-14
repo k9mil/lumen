@@ -4,6 +4,8 @@ Intelligent property risk assessment for commercial insurance underwriting.
 
 **Live Demo:** [https://lumen-web-781072572686.europe-west2.run.app/](https://lumen-web-781072572686.europe-west2.run.app/)
 
+**Demo Video:** [Watch Lumen in Action](https://github.com/user-attachments/assets/bb2922af-e2c0-432a-93bb-3ec2d64e59b3)
+
 ---
 
 ## Overview
