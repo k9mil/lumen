@@ -90,51 +90,211 @@ interface BuildingModalProps {
 function StreetViewGallery({ buildingId }: { buildingId: string }) {
   const directions = ["north", "east", "south", "west"];
   return (
-    <div className="grid grid-cols-4 gap-1.5 mt-2">
-      {directions.map((dir) => (
-        <div key={dir} className="relative group">
-          <img
-            src={`/api/buildings/${buildingId}/streetview?direction=${dir}`}
-            alt={`Street view ${dir}`}
-            className="w-full aspect-[4/3] object-cover rounded-md bg-white/[0.03]"
-            loading="lazy"
-          />
-          <span className="absolute bottom-1 left-1 text-[9px] text-white/70 bg-black/60 px-1 rounded uppercase">
-            {dir}
-          </span>
-        </div>
-      ))}
+    <div>
+      <div className="text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Street View</div>
+      <div className="grid grid-cols-4 gap-1.5">
+        {directions.map((dir) => (
+          <div key={dir} className="relative group">
+            <img
+              src={`/api/buildings/${buildingId}/streetview?direction=${dir}`}
+              alt={`Street view ${dir}`}
+              className="w-full aspect-[4/3] object-cover rounded-md bg-white/[0.03]"
+              loading="lazy"
+            />
+            <span className="absolute bottom-1 left-1 text-[9px] text-white/70 bg-black/60 px-1 rounded uppercase">
+              {dir}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-function EvidenceDetail({ data, buildingId, isVision }: { data: Record<string, unknown>; buildingId: string; isVision: boolean }) {
+function CompanyCard({ company }: { company: Record<string, unknown> }) {
+  const status = String(company.company_status ?? "").toLowerCase();
+  const isDissolved = status === "dissolved" || status === "liquidation" || status === "administration";
   return (
-    <div className="space-y-2">
-      {isVision && <StreetViewGallery buildingId={buildingId} />}
-      <div className="space-y-1.5">
-        {Object.entries(data).map(([key, value]) => {
-          const label = key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-          return (
-            <div key={key} className="flex gap-2">
-              <span className="text-[11px] text-white/40 shrink-0 min-w-[80px]">{label}</span>
-              <span className="text-[11px] text-white/70">
-                {Array.isArray(value)
-                  ? value.length === 0
-                    ? "—"
-                    : value.map((v, i) => (
-                        <span key={i} className="inline-block mr-1 mb-1 px-1.5 py-0.5 bg-white/[0.06] rounded text-[10px]">
-                          {typeof v === "object" ? JSON.stringify(v) : String(v)}
-                        </span>
-                      ))
-                  : typeof value === "object" && value !== null
-                  ? JSON.stringify(value)
-                  : String(value ?? "—")}
-              </span>
-            </div>
-          );
-        })}
+    <div className={`p-2 rounded-md border ${isDissolved ? "border-red-500/20 bg-red-500/[0.04]" : "border-white/[0.06] bg-white/[0.02]"}`}>
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] text-white/80 font-medium">{String(company.company_name ?? "")}</span>
+        <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${isDissolved ? "text-red-400 bg-red-500/15" : "text-emerald-400 bg-emerald-500/15"}`}>
+          {String(company.company_status ?? "")}
+        </span>
       </div>
+      {(company.sic_codes as string[] | undefined)?.length ? (
+        <div className="mt-1 flex gap-1 flex-wrap">
+          {(company.sic_codes as string[]).map((sic, i) => (
+            <span key={i} className="text-[9px] text-white/50 bg-white/[0.06] px-1.5 py-0.5 rounded">{sic}</span>
+          ))}
+        </div>
+      ) : null}
+      {company.date_of_creation && (
+        <div className="text-[10px] text-white/30 mt-1">Incorporated {String(company.date_of_creation)}</div>
+      )}
+    </div>
+  );
+}
+
+function ReviewSnippet({ text }: { text: string }) {
+  return (
+    <div className="p-2 rounded-md border border-white/[0.06] bg-white/[0.02]">
+      <p className="text-[11px] text-white/60 italic leading-relaxed">&ldquo;{text}&rdquo;</p>
+    </div>
+  );
+}
+
+function LicensedPremise({ premise }: { premise: Record<string, unknown> }) {
+  return (
+    <div className="p-2 rounded-md border border-amber-500/20 bg-amber-500/[0.04]">
+      <span className="text-[11px] text-white/80 font-medium">{String(premise.name ?? "")}</span>
+      {premise.distance_m != null && (
+        <span className="text-[10px] text-white/40 ml-2">{Number(premise.distance_m).toFixed(0)}m away</span>
+      )}
+    </div>
+  );
+}
+
+function EvidenceDetail({
+  data,
+  buildingId,
+  signalType,
+  snapshot,
+}: {
+  data: Record<string, unknown>;
+  buildingId: string;
+  signalType: string;
+  snapshot: EvidenceResponse["snapshot"] | null;
+}) {
+  const companies = (snapshot?.companies_house_data as Record<string, unknown> | null)?.companies as Record<string, unknown>[] | undefined;
+  const places = snapshot?.places_data as Record<string, unknown> | null;
+  const reviews = (places?.review_snippets ?? []) as string[];
+  const vision = snapshot?.street_view_analysis as Record<string, unknown> | null;
+  const licensing = snapshot?.licensing_data as Record<string, unknown> | null;
+  const licensedPremises = (licensing?.premises ?? []) as Record<string, unknown>[];
+
+  return (
+    <div className="space-y-3">
+      {/* Street View images — for vision-related signals */}
+      {signalType === "cv_classification" && <StreetViewGallery buildingId={buildingId} />}
+
+      {/* Vision analysis summary — for vision signals */}
+      {signalType === "cv_classification" && vision && (
+        <div>
+          <div className="text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Vision Analysis</div>
+          <div className="space-y-1">
+            <div className="flex gap-2">
+              <span className="text-[11px] text-white/40 min-w-[80px]">Detected</span>
+              <span className="text-[11px] text-white/70">{String(vision.occupier_type ?? "—")}</span>
+            </div>
+            <div className="flex gap-2">
+              <span className="text-[11px] text-white/40 min-w-[80px]">Confidence</span>
+              <span className="text-[11px] text-white/70">{Math.round(Number(vision.confidence ?? 0) * 100)}%</span>
+            </div>
+            {(vision.signage_text as string[] | undefined)?.length ? (
+              <div className="flex gap-2">
+                <span className="text-[11px] text-white/40 min-w-[80px]">Signage</span>
+                <div className="flex flex-wrap gap-1">
+                  {(vision.signage_text as string[]).map((t, i) => (
+                    <span key={i} className="text-[10px] text-white/60 bg-white/[0.06] px-1.5 py-0.5 rounded">{t}</span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
+
+      {/* Companies House — for SIC mismatch or dissolved company signals */}
+      {signalType === "sic_mismatch" && companies && companies.length > 0 && (
+        <div>
+          <div className="text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Companies House Records</div>
+          <div className="space-y-1.5">
+            {companies.slice(0, 5).map((c, i) => <CompanyCard key={i} company={c} />)}
+          </div>
+        </div>
+      )}
+
+      {/* Reviews — for keyword hit signals */}
+      {signalType === "keyword_hit" && reviews.length > 0 && (
+        <div>
+          <div className="text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Review Excerpts</div>
+          <div className="space-y-1.5">
+            {reviews.slice(0, 3).map((r, i) => <ReviewSnippet key={i} text={r} />)}
+          </div>
+        </div>
+      )}
+
+      {/* Keyword source — show where keywords were found */}
+      {signalType === "keyword_hit" && (
+        <div>
+          <div className="text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Matched Keywords</div>
+          <div className="flex flex-wrap gap-1">
+            {((data.keywords ?? []) as string[]).map((k, i) => (
+              <span key={i} className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">{k}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Licensed premises — for licensing signals */}
+      {signalType === "licensing" && licensedPremises.length > 0 && (
+        <div>
+          <div className="text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Licensed Premises Nearby</div>
+          <div className="space-y-1.5">
+            {licensedPremises.slice(0, 5).map((p, i) => <LicensedPremise key={i} premise={p} />)}
+          </div>
+        </div>
+      )}
+
+      {/* Places data — rating & reviews when available */}
+      {places && (places.rating || places.review_count) && (
+        <div>
+          <div className="text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Google Places</div>
+          <div className="flex gap-4">
+            {places.rating && (
+              <div className="flex items-center gap-1">
+                <span className="text-[11px] text-amber-400">★ {String(places.rating)}</span>
+                <span className="text-[10px] text-white/30">({String(places.review_count ?? 0)} reviews)</span>
+              </div>
+            )}
+            {places.trading_name && (
+              <div className="text-[11px] text-white/50">Trading as: {String(places.trading_name)}</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Fallback: raw key-value data for anything not covered above */}
+      {Object.keys(data).length > 0 && !["keywords", "premises"].includes(Object.keys(data)[0]) && (
+        <div>
+          <div className="text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Raw Data</div>
+          <div className="space-y-1">
+            {Object.entries(data).map(([key, value]) => {
+              if (key === "keywords" || key === "premises") return null;
+              const label = key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+              return (
+                <div key={key} className="flex gap-2">
+                  <span className="text-[11px] text-white/40 shrink-0 min-w-[80px]">{label}</span>
+                  <span className="text-[11px] text-white/70">
+                    {Array.isArray(value)
+                      ? value.length === 0
+                        ? "—"
+                        : value.map((v, i) => (
+                            <span key={i} className="inline-block mr-1 mb-1 px-1.5 py-0.5 bg-white/[0.06] rounded text-[10px]">
+                              {typeof v === "object" ? JSON.stringify(v) : String(v)}
+                            </span>
+                          ))
+                      : typeof value === "object" && value !== null
+                      ? JSON.stringify(value)
+                      : String(value ?? "—")}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -362,7 +522,8 @@ export default function BuildingModal({
                                         <EvidenceDetail
                                           data={evidenceItem.raw_data}
                                           buildingId={localBuilding.id}
-                                          isVision={true}
+                                          signalType={evidenceItem.signal_type}
+                                          snapshot={evidence?.snapshot ?? null}
                                         />
                                       </div>
                                     </motion.div>
