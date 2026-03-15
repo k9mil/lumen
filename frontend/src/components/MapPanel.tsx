@@ -96,7 +96,7 @@ export default function MapPanel({
 
     const mb = window.mapboxgl;
     mb.accessToken =
-      "pk.eyJ1Ijoia2FtaWx6YWsiLCJhIjoiY21tbDJubmd0MDZ4bzJzcjhtenNkemVtcyJ9.XlGtaB72L5YlbYTnywBaDw";
+      "pk.eyJ1IjoiZmFiaWFuc2FsZ2UiLCJhIjoiY21lendoeGo0MGI0NjJrc2c5MXJrNjhldCJ9.G9X8xJ2No5o_1-ad37cbXw";
 
     const map = new mb.Map({
       container: containerRef.current,
